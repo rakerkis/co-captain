@@ -22,7 +22,7 @@ serve(async (req) => {
     console.log('Fetching Canvas assignments...');
 
     const response = await fetch(
-      `${canvasUrl}/api/v1/users/self/todo/assignment_ids?per_page=100`,
+      `${canvasUrl}/api/v1/users/self/assignments?per_page=100`,
       {
         headers: {
           'Authorization': `Bearer ${canvasToken}`,
@@ -37,37 +37,10 @@ serve(async (req) => {
       throw new Error(`Canvas API error: ${response.status}`);
     }
 
-    const assignmentIds = await response.json();
-    console.log(`Found ${assignmentIds.length} assignment IDs`);
+    const assignments = await response.json();
+    console.log(`Successfully fetched ${assignments.length} assignments`);
 
-    // Fetch detailed info for each assignment
-    const assignments = await Promise.all(
-      assignmentIds.slice(0, 50).map(async (id: string) => {
-        try {
-          const detailResponse = await fetch(
-            `${canvasUrl}/api/v1/courses/0/assignments/${id}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${canvasToken}`,
-              },
-            }
-          );
-          
-          if (detailResponse.ok) {
-            return await detailResponse.json();
-          }
-          return null;
-        } catch (error) {
-          console.error(`Error fetching assignment ${id}:`, error);
-          return null;
-        }
-      })
-    );
-
-    const validAssignments = assignments.filter(a => a !== null);
-    console.log(`Successfully fetched ${validAssignments.length} assignments`);
-
-    return new Response(JSON.stringify({ assignments: validAssignments }), {
+    return new Response(JSON.stringify({ assignments }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
