@@ -19,16 +19,11 @@ serve(async (req) => {
       throw new Error('Canvas credentials not configured');
     }
 
-    console.log('Fetching Canvas planner items...');
+    console.log('Fetching Canvas courses...');
 
-    // Get date range: 30 days in past to 90 days in future (120-day total range)
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 90);
-
-    const response = await fetch(
-      `${canvasUrl}/api/v1/planner/items?start_date=${startDate.toISOString().split('T')[0]}&end_date=${endDate.toISOString().split('T')[0]}&per_page=100`,
+    // First, get all active courses for the user
+    const coursesResponse = await fetch(
+      `${canvasUrl}/api/v1/courses?enrollment_state=active&per_page=100`,
       {
         headers: {
           'Authorization': `Bearer ${canvasToken}`,
@@ -37,25 +32,47 @@ serve(async (req) => {
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Canvas API error:', response.status, errorText);
-      throw new Error(`Canvas API error: ${response.status}`);
+    if (!coursesResponse.ok) {
+      const errorText = await coursesResponse.text();
+      console.error('Canvas API error fetching courses:', coursesResponse.status, errorText);
+      throw new Error(`Canvas API error: ${coursesResponse.status}`);
     }
 
-    const plannerItems = await response.json();
-    console.log(`Successfully fetched ${plannerItems.length} planner items`);
+    const courses = await coursesResponse.json();
+    console.log(`Found ${courses.length} active courses`);
 
-    // Extract assignments from planner items
-    const assignments = plannerItems
-      .filter((item: any) => item.plannable_type === 'assignment')
-      .map((item: any) => ({
-        ...item.plannable,
-        course_id: item.course_id,
-        html_url: item.html_url,
-      }));
+    // Fetch assignments for each course
+    const allAssignments = await Promise.all(
+      courses.map(async (course: any) => {
+        try {
+          const assignmentsResponse = await fetch(
+            `${canvasUrl}/api/v1/courses/${course.id}/assignments?per_page=100&order_by=due_at`,
+            {
+              headers: {
+                'Authorization': `Bearer ${canvasToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
 
-    console.log(`Found ${assignments.length} assignments`);
+          if (assignmentsResponse.ok) {
+            const courseAssignments = await assignmentsResponse.json();
+            // Add course info to each assignment
+            return courseAssignments.map((assignment: any) => ({
+              ...assignment,
+              course_name: course.name,
+            }));
+          }
+          return [];
+        } catch (error) {
+          console.error(`Error fetching assignments for course ${course.id}:`, error);
+          return [];
+        }
+      })
+    );
+
+    const assignments = allAssignments.flat();
+    console.log(`Found ${assignments.length} total assignments`);
 
     return new Response(JSON.stringify({ assignments }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
