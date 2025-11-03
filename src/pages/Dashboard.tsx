@@ -17,9 +17,9 @@ const Dashboard = () => {
     ...(canvasData?.assignments?.map((ca: any) => ({
       id: `canvas-${ca.id}`,
       title: ca.name,
-      subject: ca.course_id ? `Course ${ca.course_id}` : "Canvas",
+      subject: ca.course_name || "Canvas",
       dueDate: ca.due_at ? new Date(ca.due_at) : new Date(),
-      description: ca.description || "",
+      description: "",
       completed: false,
     })) || []),
     ...localAssignments,
