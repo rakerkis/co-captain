@@ -19,10 +19,16 @@ serve(async (req) => {
       throw new Error('Canvas credentials not configured');
     }
 
-    console.log('Fetching Canvas assignments...');
+    console.log('Fetching Canvas planner items...');
+
+    // Get date range: 30 days in past to 90 days in future (120-day total range)
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 90);
 
     const response = await fetch(
-      `${canvasUrl}/api/v1/users/self/assignments?per_page=100`,
+      `${canvasUrl}/api/v1/planner/items?start_date=${startDate.toISOString().split('T')[0]}&end_date=${endDate.toISOString().split('T')[0]}&per_page=100`,
       {
         headers: {
           'Authorization': `Bearer ${canvasToken}`,
@@ -37,8 +43,19 @@ serve(async (req) => {
       throw new Error(`Canvas API error: ${response.status}`);
     }
 
-    const assignments = await response.json();
-    console.log(`Successfully fetched ${assignments.length} assignments`);
+    const plannerItems = await response.json();
+    console.log(`Successfully fetched ${plannerItems.length} planner items`);
+
+    // Extract assignments from planner items
+    const assignments = plannerItems
+      .filter((item: any) => item.plannable_type === 'assignment')
+      .map((item: any) => ({
+        ...item.plannable,
+        course_id: item.course_id,
+        html_url: item.html_url,
+      }));
+
+    console.log(`Found ${assignments.length} assignments`);
 
     return new Response(JSON.stringify({ assignments }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
