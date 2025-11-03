@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Calendar, ClipboardList, LayoutDashboard } from "lucide-react";
+import { Calendar, ClipboardList, LayoutDashboard, Book } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const Navbar = () => {
@@ -47,6 +47,16 @@ const Navbar = () => {
               >
                 <ClipboardList className="w-4 h-4" />
                 <span className="hidden sm:inline">Assignments</span>
+              </Button>
+            </Link>
+            <Link to="/canvas">
+              <Button
+                variant={isActive("/canvas") ? "default" : "ghost"}
+                size="sm"
+                className="gap-2"
+              >
+                <Book className="w-4 h-4" />
+                <span className="hidden sm:inline">Canvas</span>
               </Button>
             </Link>
           </div>
