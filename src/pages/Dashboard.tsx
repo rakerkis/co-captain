@@ -5,43 +5,25 @@ import AssignmentCard, { Assignment } from "@/components/AssignmentCard";
 import CalendarView from "@/components/CalendarView";
 import AddAssignmentDialog from "@/components/AddAssignmentDialog";
 import { useNavigate } from "react-router-dom";
+import { useCanvasAssignments } from "@/hooks/useCanvasData";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    {
-      id: "1",
-      title: "Calculus Problem Set Ch. 5",
-      subject: "Math",
-      dueDate: new Date(2025, 9, 30),
-      description: "Complete problems 1-25",
+  const { data: canvasData } = useCanvasAssignments();
+  const [localAssignments, setLocalAssignments] = useState<Assignment[]>([]);
+
+  // Merge Canvas assignments with local assignments
+  const assignments: Assignment[] = [
+    ...(canvasData?.assignments?.map((ca: any) => ({
+      id: `canvas-${ca.id}`,
+      title: ca.name,
+      subject: ca.course_id ? `Course ${ca.course_id}` : "Canvas",
+      dueDate: ca.due_at ? new Date(ca.due_at) : new Date(),
+      description: ca.description || "",
       completed: false,
-    },
-    {
-      id: "2",
-      title: "Essay on Climate Change",
-      subject: "English",
-      dueDate: new Date(2025, 10, 2),
-      description: "1500 words minimum",
-      completed: false,
-    },
-    {
-      id: "3",
-      title: "Chemistry Lab Report",
-      subject: "Science",
-      dueDate: new Date(2025, 9, 28),
-      description: "Acid-base titration experiment",
-      completed: false,
-    },
-    {
-      id: "4",
-      title: "World War II Presentation",
-      subject: "History",
-      dueDate: new Date(2025, 10, 5),
-      description: "15-minute group presentation",
-      completed: false,
-    },
-  ]);
+    })) || []),
+    ...localAssignments,
+  ];
 
   const upcomingAssignments = assignments
     .filter((a) => !a.completed && a.dueDate >= new Date())
@@ -60,17 +42,23 @@ const Dashboard = () => {
       ...assignment,
       id: Date.now().toString(),
     };
-    setAssignments([...assignments, newAssignment]);
+    setLocalAssignments([...localAssignments, newAssignment]);
   };
 
   const handleToggleComplete = (id: string) => {
-    setAssignments(
-      assignments.map((a) => (a.id === id ? { ...a, completed: !a.completed } : a))
-    );
+    // Only allow toggling local assignments, not Canvas ones
+    if (!id.startsWith('canvas-')) {
+      setLocalAssignments(
+        localAssignments.map((a) => (a.id === id ? { ...a, completed: !a.completed } : a))
+      );
+    }
   };
 
   const handleDelete = (id: string) => {
-    setAssignments(assignments.filter((a) => a.id !== id));
+    // Only allow deleting local assignments, not Canvas ones
+    if (!id.startsWith('canvas-')) {
+      setLocalAssignments(localAssignments.filter((a) => a.id !== id));
+    }
   };
 
   const [headerText, setHeaderText] = useState("My Dashboard");
