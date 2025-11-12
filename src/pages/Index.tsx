@@ -3,9 +3,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { useCanvasAssignments } from "@/hooks/useCanvasAssignments";
 import { Badge } from "@/components/ui/badge";
 import { format, isToday, isTomorrow, startOfDay } from "date-fns";
-import { ClipboardList, AlertCircle, CheckCircle, Calendar as CalendarIcon } from "lucide-react";
+import { ClipboardList, AlertCircle, Calendar as CalendarIcon } from "lucide-react";
 import { useState } from "react";
-import PomodoroTimer from "@/components/PomodoroTimer";
+import TodoList from "@/components/TodoList";
 
 const Index = () => {
   const { data, isLoading } = useCanvasAssignments();
@@ -94,7 +94,7 @@ const Index = () => {
           </Card>
         </div>
 
-        {/* Calendar, Assignments, and Pomodoro Timer */}
+        {/* Calendar and To-Do List */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Calendar */}
           <Card className="lg:col-span-2">
@@ -120,61 +120,11 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* Pomodoro Timer */}
+          {/* To-Do List */}
           <div>
-            <PomodoroTimer />
+            <TodoList />
           </div>
         </div>
-
-        {/* Assignments for Selected Date */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {selectedDate
-                ? isToday(selectedDate)
-                  ? "Today's Assignments"
-                  : isTomorrow(selectedDate)
-                  ? "Tomorrow's Assignments"
-                  : `Assignments for ${format(selectedDate, "MMM d, yyyy")}`
-                : "Select a Date"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-muted-foreground">Loading...</p>
-            ) : selectedAssignments.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {selectedAssignments.map((assignment) => (
-                  <div
-                    key={assignment.id}
-                    className="p-3 border border-border rounded-lg hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-foreground truncate">
-                          {assignment.name}
-                        </h4>
-                        <p className="text-sm text-muted-foreground">{assignment.course_name}</p>
-                      </div>
-                      <Badge
-                        className={`${getPriorityColor(
-                          assignment.priority
-                        )} text-white shrink-0`}
-                      >
-                        {assignment.priority}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <CheckCircle className="w-12 h-12 text-primary mx-auto mb-3" />
-                <p className="text-muted-foreground">No assignments for this date</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

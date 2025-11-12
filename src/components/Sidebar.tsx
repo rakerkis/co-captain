@@ -1,4 +1,4 @@
-import { Calendar, ClipboardList, GraduationCap, BookOpen, User } from "lucide-react";
+import { Calendar, ClipboardList, GraduationCap, BookOpen, User, Timer } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ const Sidebar = () => {
     { icon: ClipboardList, label: "Assignments", path: "/assignments" },
     { icon: GraduationCap, label: "GPA", path: "/gpa" },
     { icon: BookOpen, label: "Courses", path: "/courses" },
+    { icon: Timer, label: "Focus", path: "/focus" },
   ];
 
   return (
