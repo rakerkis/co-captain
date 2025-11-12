@@ -23,11 +23,13 @@ export const useCanvasAssignments = () => {
       
       const assignments = data?.assignments || [];
       
-      // Filter out assignments older than 1 week
+      // Filter out assignments older than 1 week past due date
       const oneWeekAgo = subWeeks(new Date(), 1);
       const recentAssignments = assignments.filter((a: CanvasAssignment) => {
         if (!a.due_at) return true;
-        return new Date(a.due_at) >= oneWeekAgo;
+        const dueDate = new Date(a.due_at);
+        const isMoreThanWeekOld = dueDate < oneWeekAgo;
+        return !isMoreThanWeekOld;
       });
 
       // Fetch completion status
@@ -45,7 +47,14 @@ export const useCanvasAssignments = () => {
         completed: completionMap.get(a.id.toString()) || false,
       }));
 
-      return { assignments: assignmentsWithStatus };
+      // Filter out completed assignments that are past their due date
+      const filteredAssignments = assignmentsWithStatus.filter((a: CanvasAssignment) => {
+        if (!a.completed) return true;
+        if (!a.due_at) return true;
+        return new Date(a.due_at) >= new Date();
+      });
+
+      return { assignments: filteredAssignments };
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

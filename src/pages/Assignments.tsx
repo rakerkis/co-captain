@@ -32,6 +32,11 @@ const Assignments = () => {
   };
 
   const sortedAssignments = [...assignments].sort((a, b) => {
+    // Sort by completion status first (incomplete first)
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+    // Then sort by due date
     if (!a.due_at) return 1;
     if (!b.due_at) return -1;
     return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
