@@ -77,26 +77,32 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
           {/* Calendar */}
           <Card className="lg:col-span-2 flex flex-col h-full">
-            <CardHeader className="flex flex-row items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5" />
-                <CardTitle>
-                  {selectedDate ? format(selectedDate, "MMMM yyyy") : format(new Date(), "MMMM yyyy")}
-                </CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-1 flex items-center justify-center overflow-hidden pb-6">
+            <CardContent className="flex-1 flex items-center justify-center overflow-hidden p-6">
               <Calendar
                 mode="single"
                 selected={selectedDate}
                 onSelect={setSelectedDate}
-                className="w-full h-full pointer-events-auto [&_.rdp-month]:w-full [&_.rdp-month]:h-full [&_.rdp-table]:w-full [&_.rdp-table]:h-full [&_.rdp-tbody]:h-full [&_.rdp-row]:h-[calc(100%/6)] [&_.rdp-cell]:p-1 [&_.rdp-cell]:h-full [&_.rdp-day]:h-full [&_.rdp-day]:w-full [&_.rdp-day]:rounded-xl [&_.rdp-day]:border [&_.rdp-day]:border-border [&_.rdp-day]:flex [&_.rdp-day]:flex-col [&_.rdp-day]:items-start [&_.rdp-day]:justify-start [&_.rdp-day]:p-2 [&_.rdp-day_button]:w-full [&_.rdp-day_button]:h-full [&_.rdp-day_button]:flex [&_.rdp-day_button]:flex-col [&_.rdp-day_button]:items-start [&_.rdp-day_button]:justify-start [&_.rdp-day_button]:p-2"
-                modifiers={{
-                  hasAssignment: datesWithAssignments,
-                }}
-                modifiersClassNames={{
-                  hasAssignment: "relative after:content-[''] after:absolute after:bottom-2 after:left-2 after:w-1.5 after:h-1.5 after:rounded-full after:bg-primary",
-                  selected: "bg-primary text-primary-foreground border-primary",
+                className="w-full h-full pointer-events-auto flex flex-col"
+                classNames={{
+                  months: "flex flex-col h-full w-full",
+                  month: "flex flex-col h-full w-full space-y-4",
+                  caption: "flex justify-center pt-1 relative items-center mb-4",
+                  caption_label: "text-lg font-semibold",
+                  nav: "space-x-1 flex items-center",
+                  nav_button: "h-9 w-9 bg-transparent hover:bg-accent rounded-lg",
+                  nav_button_previous: "absolute left-1",
+                  nav_button_next: "absolute right-1",
+                  table: "w-full border-collapse flex-1",
+                  head_row: "flex w-full mb-2",
+                  head_cell: "text-muted-foreground rounded-md w-full font-medium text-sm flex-1 text-center",
+                  row: "flex w-full mt-2 flex-1",
+                  cell: "relative p-0 text-center flex-1 focus-within:relative focus-within:z-20",
+                  day: "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-2xl border border-border hover:bg-accent transition-colors",
+                  day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                  day_today: "bg-accent text-accent-foreground",
+                  day_outside: "text-muted-foreground opacity-50",
+                  day_disabled: "text-muted-foreground opacity-50",
+                  day_hidden: "invisible",
                 }}
                 components={{
                   Day: ({ date, ...props }) => {
@@ -107,24 +113,30 @@ const Index = () => {
                       return dueDate.getTime() === currentDate.getTime();
                     });
                     
+                    const isSelected = selectedDate && startOfDay(date).getTime() === startOfDay(selectedDate).getTime();
+                    
                     return (
-                      <div className="relative w-full h-full">
-                        <button
-                          {...props}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleDateClick(date);
-                          }}
-                          className="w-full h-full flex flex-col items-start justify-start p-2 rounded-xl hover:bg-accent transition-colors cursor-pointer"
-                        >
-                          <span className="text-sm font-medium">{format(date, "d")}</span>
-                          {dayAssignments.length > 0 && (
-                            <span className="text-xs text-muted-foreground mt-auto truncate w-full">
-                              {dayAssignments[0].course_name?.slice(0, 6)}...
-                            </span>
-                          )}
-                        </button>
-                      </div>
+                      <button
+                        {...props}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDateClick(date);
+                        }}
+                        className={`w-full h-full min-h-[80px] flex flex-col items-start justify-start p-3 rounded-2xl border transition-colors ${
+                          isSelected 
+                            ? "bg-primary text-primary-foreground border-primary" 
+                            : "border-border hover:bg-accent"
+                        }`}
+                      >
+                        <span className="text-base font-medium mb-1">{format(date, "d")}</span>
+                        {dayAssignments.length > 0 && (
+                          <span className={`text-xs mt-auto truncate w-full text-left ${
+                            isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
+                          }`}>
+                            {dayAssignments[0].course_name?.slice(0, 8)}...
+                          </span>
+                        )}
+                      </button>
                     );
                   },
                 }}
