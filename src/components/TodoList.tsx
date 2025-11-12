@@ -74,10 +74,26 @@ const TodoList = () => {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle>To-Do List</CardTitle>
+        <Button onClick={addTodo} size="icon" className="shrink-0">
+          <Plus className="w-4 h-4" />
+        </Button>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Add Todo Input */}
+        <div className="flex gap-2">
+          <Input
+            placeholder="Add a new task..."
+            value={newTodo}
+            onChange={(e) => setNewTodo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                addTodo();
+              }
+            }}
+          />
+        </div>
         {/* Upcoming Assignments */}
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground mb-2">
@@ -155,25 +171,8 @@ const TodoList = () => {
                   <Trash2 className="w-4 h-4 text-destructive" />
                 </Button>
               </div>
-            ))}
+          ))}
           </div>
-        </div>
-
-        {/* Add Todo Input */}
-        <div className="flex gap-2">
-          <Input
-            placeholder="Add a new task..."
-            value={newTodo}
-            onChange={(e) => setNewTodo(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                addTodo();
-              }
-            }}
-          />
-          <Button onClick={addTodo} size="icon">
-            <Plus className="w-4 h-4" />
-          </Button>
         </div>
       </CardContent>
     </Card>
