@@ -1,0 +1,108 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const canvasToken = Deno.env.get('CANVAS_API_TOKEN');
+    const canvasUrl = Deno.env.get('CANVAS_INSTANCE_URL');
+
+    if (!canvasToken || !canvasUrl) {
+      throw new Error('Canvas credentials not configured');
+    }
+
+    console.log('Fetching Canvas courses...');
+
+    // Fetch active courses
+    const coursesResponse = await fetch(
+      `${canvasUrl}/api/v1/courses?enrollment_state=active&per_page=100`,
+      {
+        headers: {
+          'Authorization': `Bearer ${canvasToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!coursesResponse.ok) {
+      const errorText = await coursesResponse.text();
+      console.error('Canvas courses API error:', coursesResponse.status, errorText);
+      throw new Error(`Canvas API error: ${coursesResponse.status}`);
+    }
+
+    const courses = await coursesResponse.json();
+    console.log(`Found ${courses.length} active courses`);
+
+    // Fetch assignments for each course
+    const allAssignments = [];
+
+    for (const course of courses) {
+      try {
+        const assignmentsResponse = await fetch(
+          `${canvasUrl}/api/v1/courses/${course.id}/assignments?per_page=100`,
+          {
+            headers: {
+              'Authorization': `Bearer ${canvasToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        if (assignmentsResponse.ok) {
+          const assignments = await assignmentsResponse.json();
+          
+          // Add course info and priority to each assignment
+          const enrichedAssignments = assignments.map((assignment: any) => {
+            // Calculate priority based on due date
+            let priority = 'low';
+            if (assignment.due_at) {
+              const daysUntilDue = Math.floor(
+                (new Date(assignment.due_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+              );
+              
+              if (daysUntilDue < 0) {
+                priority = 'high'; // Overdue
+              } else if (daysUntilDue <= 3) {
+                priority = 'high'; // Due within 3 days
+              } else if (daysUntilDue <= 7) {
+                priority = 'medium'; // Due within a week
+              }
+            }
+
+            return {
+              ...assignment,
+              course_name: course.name,
+              course_code: course.course_code || course.name,
+              priority,
+            };
+          });
+
+          allAssignments.push(...enrichedAssignments);
+        }
+      } catch (error) {
+        console.error(`Error fetching assignments for course ${course.id}:`, error);
+      }
+    }
+
+    console.log(`Found ${allAssignments.length} total assignments`);
+
+    return new Response(JSON.stringify({ assignments: allAssignments }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error('Error in fetch-canvas-assignments function:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
