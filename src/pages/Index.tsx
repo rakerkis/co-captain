@@ -97,7 +97,7 @@ const Index = () => {
         {/* Calendar and To-Do List */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Calendar */}
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2 flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5" />
@@ -106,12 +106,12 @@ const Index = () => {
                 </CardTitle>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex items-center justify-center">
               <Calendar
                 mode="single"
                 selected={selectedDate}
                 onSelect={setSelectedDate}
-                className="w-full pointer-events-auto [&_.rdp-month]:w-full [&_.rdp-table]:w-full [&_.rdp-cell]:p-0 [&_.rdp-day]:h-20 [&_.rdp-day]:w-full [&_.rdp-day]:rounded-xl [&_.rdp-day]:border [&_.rdp-day]:border-border [&_.rdp-day]:flex [&_.rdp-day]:flex-col [&_.rdp-day]:items-start [&_.rdp-day]:justify-start [&_.rdp-day]:p-2 [&_.rdp-day_button]:w-full [&_.rdp-day_button]:h-full [&_.rdp-day_button]:flex [&_.rdp-day_button]:flex-col [&_.rdp-day_button]:items-start [&_.rdp-day_button]:justify-start [&_.rdp-day_button]:p-2"
+                className="w-full h-full pointer-events-auto [&_.rdp-month]:w-full [&_.rdp-month]:h-full [&_.rdp-table]:w-full [&_.rdp-table]:h-full [&_.rdp-tbody]:h-full [&_.rdp-cell]:p-0 [&_.rdp-cell]:h-full [&_.rdp-day]:min-h-32 [&_.rdp-day]:w-full [&_.rdp-day]:rounded-xl [&_.rdp-day]:border [&_.rdp-day]:border-border [&_.rdp-day]:flex [&_.rdp-day]:flex-col [&_.rdp-day]:items-start [&_.rdp-day]:justify-start [&_.rdp-day]:p-2 [&_.rdp-day_button]:w-full [&_.rdp-day_button]:h-full [&_.rdp-day_button]:flex [&_.rdp-day_button]:flex-col [&_.rdp-day_button]:items-start [&_.rdp-day_button]:justify-start [&_.rdp-day_button]:p-2"
                 modifiers={{
                   hasAssignment: datesWithAssignments,
                 }}
