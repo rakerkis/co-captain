@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2 } from "lucide-react";
-import { useCanvasAssignments } from "@/hooks/useCanvasAssignments";
+import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 
@@ -16,6 +16,7 @@ interface CustomTodo {
 
 const TodoList = () => {
   const { data, isLoading } = useCanvasAssignments();
+  const toggleAssignment = useToggleAssignment();
   const [customTodos, setCustomTodos] = useState<CustomTodo[]>([]);
   const [newTodo, setNewTodo] = useState("");
 
@@ -24,6 +25,13 @@ const TodoList = () => {
     .filter((a) => a.due_at && new Date(a.due_at) >= new Date())
     .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime())
     .slice(0, 5);
+
+  const handleToggleAssignment = (assignmentId: number, currentStatus: boolean) => {
+    toggleAssignment.mutate({
+      assignmentId,
+      completed: !currentStatus,
+    });
+  };
 
   const addTodo = () => {
     if (newTodo.trim()) {
@@ -82,10 +90,16 @@ const TodoList = () => {
               {upcomingAssignments.map((assignment) => (
                 <div
                   key={assignment.id}
-                  className="flex items-center justify-between p-2 border border-border rounded-lg"
+                  className="flex items-center gap-2 p-2 border border-border rounded-lg"
                 >
+                  <Checkbox
+                    checked={assignment.completed || false}
+                    onCheckedChange={() =>
+                      handleToggleAssignment(assignment.id, assignment.completed || false)
+                    }
+                  />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
+                    <p className={`text-sm font-medium truncate ${assignment.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                       {assignment.name}
                     </p>
                     <p className="text-xs text-muted-foreground">

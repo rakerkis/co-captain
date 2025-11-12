@@ -1,11 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useCanvasAssignments } from "@/hooks/useCanvasAssignments";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { format, isPast, isFuture } from "date-fns";
 import { ExternalLink, Loader2 } from "lucide-react";
 
 const Assignments = () => {
   const { data, isLoading } = useCanvasAssignments();
+  const toggleAssignment = useToggleAssignment();
+
+  const handleToggleAssignment = (assignmentId: number, currentStatus: boolean) => {
+    toggleAssignment.mutate({
+      assignmentId,
+      completed: !currentStatus,
+    });
+  };
 
   const assignments = data?.assignments || [];
 
@@ -58,11 +67,18 @@ const Assignments = () => {
                   }`}
                 >
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={assignment.completed || false}
+                        onCheckedChange={() =>
+                          handleToggleAssignment(assignment.id, assignment.completed || false)
+                        }
+                        className="mt-1"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-3 mb-2">
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-lg text-foreground truncate">
+                            <h3 className={`font-semibold text-lg truncate ${assignment.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                               {assignment.name}
                             </h3>
                             <p className="text-sm text-muted-foreground">
