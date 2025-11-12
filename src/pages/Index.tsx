@@ -98,22 +98,51 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Calendar */}
           <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Calendar</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5" />
+                <CardTitle>
+                  {selectedDate ? format(selectedDate, "MMMM yyyy") : format(new Date(), "MMMM yyyy")}
+                </CardTitle>
+              </div>
             </CardHeader>
-            <CardContent className="flex justify-center">
+            <CardContent>
               <Calendar
                 mode="single"
                 selected={selectedDate}
                 onSelect={setSelectedDate}
-                className="rounded-md border pointer-events-auto scale-125"
+                className="w-full pointer-events-auto [&_.rdp-month]:w-full [&_.rdp-table]:w-full [&_.rdp-cell]:p-0 [&_.rdp-day]:h-20 [&_.rdp-day]:w-full [&_.rdp-day]:rounded-xl [&_.rdp-day]:border [&_.rdp-day]:border-border [&_.rdp-day]:flex [&_.rdp-day]:flex-col [&_.rdp-day]:items-start [&_.rdp-day]:justify-start [&_.rdp-day]:p-2 [&_.rdp-day_button]:w-full [&_.rdp-day_button]:h-full [&_.rdp-day_button]:flex [&_.rdp-day_button]:flex-col [&_.rdp-day_button]:items-start [&_.rdp-day_button]:justify-start [&_.rdp-day_button]:p-2"
                 modifiers={{
                   hasAssignment: datesWithAssignments,
                 }}
-                modifiersStyles={{
-                  hasAssignment: {
-                    fontWeight: "bold",
-                    textDecoration: "underline",
+                modifiersClassNames={{
+                  hasAssignment: "relative after:content-[''] after:absolute after:bottom-2 after:left-2 after:w-1.5 after:h-1.5 after:rounded-full after:bg-primary",
+                  selected: "bg-primary text-primary-foreground border-primary",
+                }}
+                components={{
+                  Day: ({ date, ...props }) => {
+                    const dayAssignments = assignments.filter((a) => {
+                      if (!a.due_at) return false;
+                      const dueDate = startOfDay(new Date(a.due_at));
+                      const currentDate = startOfDay(date);
+                      return dueDate.getTime() === currentDate.getTime();
+                    });
+                    
+                    return (
+                      <div className="relative w-full h-full">
+                        <button
+                          {...props}
+                          className="w-full h-full flex flex-col items-start justify-start p-2 rounded-xl hover:bg-accent transition-colors"
+                        >
+                          <span className="text-sm font-medium">{format(date, "d")}</span>
+                          {dayAssignments.length > 0 && (
+                            <span className="text-xs text-muted-foreground mt-auto truncate w-full">
+                              {dayAssignments[0].course_name?.slice(0, 6)}...
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    );
                   },
                 }}
               />
