@@ -1,15 +1,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
-import { useCanvasAssignments } from "@/hooks/useCanvasAssignments";
+import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { Badge } from "@/components/ui/badge";
-import { format, isToday, isTomorrow, startOfDay } from "date-fns";
-import { ClipboardList, AlertCircle, Calendar as CalendarIcon } from "lucide-react";
+import { format, isToday, isTomorrow, startOfDay, isPast } from "date-fns";
+import { ClipboardList, AlertCircle, Calendar as CalendarIcon, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import TodoList from "@/components/TodoList";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const Index = () => {
   const { data, isLoading } = useCanvasAssignments();
+  const toggleAssignment = useToggleAssignment();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const assignments = data?.assignments || [];
 
@@ -47,6 +56,26 @@ const Index = () => {
         return "bg-green-500";
       default:
         return "bg-muted";
+    }
+  };
+
+  const handleToggleAssignment = (assignmentId: number, currentStatus: boolean) => {
+    toggleAssignment.mutate({
+      assignmentId,
+      completed: !currentStatus,
+    });
+  };
+
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(date);
+    const dayAssignments = assignments.filter((a) => {
+      if (!a.due_at) return false;
+      const dueDate = startOfDay(new Date(a.due_at));
+      const currentDate = startOfDay(date);
+      return dueDate.getTime() === currentDate.getTime();
+    });
+    if (dayAssignments.length > 0) {
+      setDialogOpen(true);
     }
   };
 
@@ -132,7 +161,11 @@ const Index = () => {
                       <div className="relative w-full h-full">
                         <button
                           {...props}
-                          className="w-full h-full flex flex-col items-start justify-start p-2 rounded-xl hover:bg-accent transition-colors"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleDateClick(date);
+                          }}
+                          className="w-full h-full flex flex-col items-start justify-start p-2 rounded-xl hover:bg-accent transition-colors cursor-pointer"
                         >
                           <span className="text-sm font-medium">{format(date, "d")}</span>
                           {dayAssignments.length > 0 && (
@@ -154,6 +187,86 @@ const Index = () => {
             <TodoList />
           </div>
         </div>
+
+        {/* Assignment Details Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Assignments for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              {selectedAssignments.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No assignments for this date</p>
+              ) : (
+                selectedAssignments.map((assignment) => {
+                  const dueDate = assignment.due_at ? new Date(assignment.due_at) : null;
+                  const isOverdue = dueDate && isPast(dueDate);
+                  
+                  return (
+                    <Card key={assignment.id} className={isOverdue ? "border-destructive/50" : ""}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={assignment.completed || false}
+                            onCheckedChange={() =>
+                              handleToggleAssignment(assignment.id, assignment.completed || false)
+                            }
+                            className="mt-1"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-3 mb-2">
+                              <div className="flex-1 min-w-0">
+                                <h3 className={`font-semibold text-lg ${assignment.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                                  {assignment.name}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                  {assignment.course_name} ({assignment.course_code})
+                                </p>
+                              </div>
+                              <Badge
+                                className={`${getPriorityColor(assignment.priority)} text-white shrink-0`}
+                              >
+                                {assignment.priority}
+                              </Badge>
+                            </div>
+
+                            <div className="flex items-center gap-4 text-sm">
+                              {dueDate && (
+                                <div
+                                  className={`${
+                                    isOverdue
+                                      ? "text-destructive font-medium"
+                                      : "text-muted-foreground"
+                                  }`}
+                                >
+                                  Due: {format(dueDate, "MMM d, yyyy 'at' h:mm a")}
+                                  {isOverdue && " (Overdue)"}
+                                </div>
+                              )}
+                              {assignment.html_url && (
+                                <a
+                                  href={assignment.html_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-primary hover:underline"
+                                >
+                                  View in Canvas
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
