@@ -6,7 +6,7 @@ const Sidebar = () => {
   const location = useLocation();
 
   const navItems = [
-    { icon: Calendar, label: "Calendar", path: "/" },
+    { icon: Calendar, label: "Home", path: "/" },
     { icon: ClipboardList, label: "Assignments", path: "/assignments" },
     { icon: GraduationCap, label: "GPA", path: "/gpa" },
     { icon: BookOpen, label: "Courses", path: "/courses" },
