@@ -43,18 +43,6 @@ const App = () => {
     );
   }
 
-  if (!session) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <AuthForm />
-        </TooltipProvider>
-      </QueryClientProvider>
-    );
-  }
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -62,7 +50,7 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <div className="flex min-h-screen w-full">
-            <Sidebar />
+            <Sidebar session={session} />
             <main className="flex-1">
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -70,6 +58,7 @@ const App = () => {
                 <Route path="/gpa" element={<GPA />} />
                 <Route path="/courses" element={<Courses />} />
                 <Route path="/focus" element={<Focus />} />
+                <Route path="/auth" element={<AuthForm />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
