@@ -3,10 +3,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Calendar } from "lucide-react";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
+import { useCustomAssignments, useCreateCustomAssignment, useToggleCustomAssignment, useDeleteCustomAssignment } from "@/hooks/useCustomAssignments";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CustomTodo {
   id: string;
@@ -17,8 +35,24 @@ interface CustomTodo {
 const TodoList = () => {
   const { data, isLoading } = useCanvasAssignments();
   const toggleAssignment = useToggleAssignment();
+  const { data: customAssignments, isLoading: customLoading } = useCustomAssignments();
+  const createCustomAssignment = useCreateCustomAssignment();
+  const toggleCustomAssignment = useToggleCustomAssignment();
+  const deleteCustomAssignment = useDeleteCustomAssignment();
+  
   const [customTodos, setCustomTodos] = useState<CustomTodo[]>([]);
   const [newTodo, setNewTodo] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: "",
+    due_at: "",
+    course_name: "",
+    description: "",
+    links: "",
+    priority: "medium" as "high" | "medium" | "low",
+  });
 
   const assignments = data?.assignments || [];
   const upcomingAssignments = assignments
@@ -59,6 +93,38 @@ const TodoList = () => {
     setCustomTodos(customTodos.filter((todo) => todo.id !== id));
   };
 
+  const handleCreateAssignment = async () => {
+    if (!formData.name.trim()) return;
+
+    await createCustomAssignment.mutateAsync({
+      name: formData.name,
+      due_at: formData.due_at || null,
+      course_name: formData.course_name || null,
+      description: formData.description || null,
+      links: formData.links || null,
+      priority: formData.priority,
+    });
+
+    // Reset form
+    setFormData({
+      name: "",
+      due_at: "",
+      course_name: "",
+      description: "",
+      links: "",
+      priority: "medium",
+    });
+    setDialogOpen(false);
+  };
+
+  const handleToggleCustomAssignment = (id: string, currentStatus: boolean) => {
+    toggleCustomAssignment.mutate({ id, completed: !currentStatus });
+  };
+
+  const handleDeleteCustomAssignment = (id: string) => {
+    deleteCustomAssignment.mutate(id);
+  };
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "high":
@@ -76,9 +142,89 @@ const TodoList = () => {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle>To-Do List</CardTitle>
-        <Button onClick={addTodo} size="icon" className="shrink-0">
-          <Plus className="w-4 h-4" />
-        </Button>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="icon" className="shrink-0">
+              <Plus className="w-4 h-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create Assignment</DialogTitle>
+              <DialogDescription>
+                Add a new custom assignment or event to your calendar
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                  id="name"
+                  placeholder="Assignment name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="due_at">Due Date</Label>
+                <Input
+                  id="due_at"
+                  type="datetime-local"
+                  value={formData.due_at}
+                  onChange={(e) => setFormData({ ...formData, due_at: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="course_name">Course/Subject</Label>
+                <Input
+                  id="course_name"
+                  placeholder="e.g., Math 101"
+                  value={formData.course_name}
+                  onChange={(e) => setFormData({ ...formData, course_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(value: "high" | "medium" | "low") =>
+                    setFormData({ ...formData, priority: value })
+                  }
+                >
+                  <SelectTrigger id="priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Assignment details..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="links">Important Links</Label>
+                <Input
+                  id="links"
+                  placeholder="https://..."
+                  value={formData.links}
+                  onChange={(e) => setFormData({ ...formData, links: e.target.value })}
+                />
+              </div>
+              <Button onClick={handleCreateAssignment} className="w-full">
+                Create Assignment
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Add Todo Input */}
@@ -94,10 +240,68 @@ const TodoList = () => {
             }}
           />
         </div>
-        {/* Upcoming Assignments */}
+        {/* Custom Assignments */}
+        {customAssignments && customAssignments.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-muted-foreground mb-2">
+              My Assignments
+            </h3>
+            <div className="space-y-2">
+              {customAssignments
+                .filter((a) => !a.completed || (a.due_at && new Date(a.due_at) >= new Date()))
+                .slice(0, 5)
+                .map((assignment) => (
+                  <div
+                    key={assignment.id}
+                    className="flex items-center gap-2 p-2 border border-border rounded-lg"
+                  >
+                    <Checkbox
+                      checked={assignment.completed}
+                      onCheckedChange={() =>
+                        handleToggleCustomAssignment(assignment.id, assignment.completed)
+                      }
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`text-sm font-medium truncate ${
+                          assignment.completed
+                            ? "line-through text-muted-foreground"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {assignment.name}
+                      </p>
+                      {assignment.course_name && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {assignment.course_name}
+                        </p>
+                      )}
+                      {assignment.due_at && (
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(assignment.due_at), "MMM d, h:mm a")}
+                        </p>
+                      )}
+                    </div>
+                    <Badge className={getPriorityColor(assignment.priority)}>
+                      {assignment.priority}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteCustomAssignment(assignment.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Canvas Assignments */}
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground mb-2">
-            Upcoming Assignments
+            Canvas Assignments
           </h3>
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>

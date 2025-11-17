@@ -41,6 +41,51 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_assignments: {
+        Row: {
+          completed: boolean
+          completed_at: string | null
+          course_name: string | null
+          created_at: string
+          description: string | null
+          due_at: string | null
+          id: string
+          links: string | null
+          name: string
+          priority: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean
+          completed_at?: string | null
+          course_name?: string | null
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          links?: string | null
+          name: string
+          priority?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed?: boolean
+          completed_at?: string | null
+          course_name?: string | null
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          links?: string | null
+          name?: string
+          priority?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
