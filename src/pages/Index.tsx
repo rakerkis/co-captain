@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { useCanvasAssignments, useToggleAssignment, type CanvasAssignment } from "@/hooks/useCanvasAssignments";
 import { useCustomAssignments, useToggleCustomAssignment, type CustomAssignment } from "@/hooks/useCustomAssignments";
+import { useGoogleCalendarEvents, useGoogleCalendarAuth, useGoogleCalendarDisconnect, type GoogleCalendarEvent } from "@/hooks/useGoogleCalendar";
 import { Badge } from "@/components/ui/badge";
 import { format, startOfDay, isPast } from "date-fns";
 import { Calendar as CalendarIcon, ExternalLink, Trash2 } from "lucide-react";
@@ -16,8 +17,18 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 
-type CombinedAssignment = (CanvasAssignment | CustomAssignment) & {
-  isCustom?: boolean;
+type CombinedAssignment = {
+  id: string | number;
+  name: string;
+  due_at: string | null | undefined;
+  course_name: string;
+  course_code: string;
+  priority: string;
+  html_url: string;
+  completed: boolean;
+  isCustom: boolean;
+  isGoogleEvent: boolean;
+  description?: string;
 };
 
 const Index = () => {
@@ -25,15 +36,20 @@ const Index = () => {
   const toggleAssignment = useToggleAssignment();
   const { data: customAssignments } = useCustomAssignments();
   const toggleCustomAssignment = useToggleCustomAssignment();
+  const { data: googleCalendarData } = useGoogleCalendarEvents();
+  const googleCalendarAuth = useGoogleCalendarAuth();
+  const googleCalendarDisconnect = useGoogleCalendarDisconnect();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const canvasAssignments = data?.assignments || [];
   const customAssignmentsList = customAssignments || [];
+  const googleEvents = googleCalendarData?.events || [];
+  const isGoogleConnected = googleCalendarData?.isConnected || false;
 
-  // Combine both Canvas and custom assignments
+  // Combine Canvas, custom assignments, and Google Calendar events
   const allAssignments: CombinedAssignment[] = useMemo(() => {
-    const canvas = canvasAssignments.map((a) => ({ ...a, isCustom: false }));
+    const canvas = canvasAssignments.map((a) => ({ ...a, isCustom: false, isGoogleEvent: false }));
     const custom = customAssignmentsList.map((a) => ({
       ...a,
       id: a.id,
@@ -45,9 +61,23 @@ const Index = () => {
       html_url: "",
       completed: a.completed,
       isCustom: true,
+      isGoogleEvent: false,
     }));
-    return [...canvas, ...custom];
-  }, [canvasAssignments, customAssignmentsList]);
+    const google = googleEvents.map((event) => ({
+      id: event.id,
+      name: event.summary,
+      due_at: event.start.dateTime || event.start.date,
+      course_name: "Google Calendar",
+      course_code: "",
+      priority: "medium" as const,
+      html_url: event.htmlLink || "",
+      completed: false,
+      isCustom: false,
+      isGoogleEvent: true,
+      description: event.description,
+    }));
+    return [...canvas, ...custom, ...google];
+  }, [canvasAssignments, customAssignmentsList, googleEvents]);
 
   // Get assignments for selected date
   const selectedAssignments = selectedDate
@@ -78,6 +108,10 @@ const Index = () => {
   };
 
   const handleToggleAssignment = (assignment: CombinedAssignment) => {
+    if (assignment.isGoogleEvent) {
+      // Google Calendar events can't be marked as complete
+      return;
+    }
     if (assignment.isCustom) {
       toggleCustomAssignment.mutate({
         id: assignment.id as string,
@@ -111,6 +145,33 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
           {/* Calendar */}
           <Card className="lg:col-span-2 flex flex-col h-full">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5" />
+                  Assignment Calendar
+                </CardTitle>
+                <div className="flex gap-2">
+                  {isGoogleConnected ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => googleCalendarDisconnect.mutate()}
+                    >
+                      Disconnect Google
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => googleCalendarAuth.mutate()}
+                    >
+                      Connect Google Calendar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
             <CardContent className="flex-1 flex items-center justify-center overflow-hidden p-6">
               <Calendar
                 mode="single"
@@ -204,11 +265,13 @@ const Index = () => {
                     <Card key={assignment.id} className={isOverdue ? "border-destructive/50" : ""}>
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
-                          <Checkbox
-                            checked={assignment.completed || false}
-                            onCheckedChange={() => handleToggleAssignment(assignment)}
-                            className="mt-1"
-                          />
+                          {!assignment.isGoogleEvent && (
+                            <Checkbox
+                              checked={assignment.completed || false}
+                              onCheckedChange={() => handleToggleAssignment(assignment)}
+                              className="mt-1"
+                            />
+                          )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start gap-3 mb-2">
                               <div className="flex-1 min-w-0">
