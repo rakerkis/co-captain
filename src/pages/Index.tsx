@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
-import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
+import { useCanvasAssignments, useToggleAssignment, type CanvasAssignment } from "@/hooks/useCanvasAssignments";
+import { useCustomAssignments, useToggleCustomAssignment, type CustomAssignment } from "@/hooks/useCustomAssignments";
 import { Badge } from "@/components/ui/badge";
 import { format, startOfDay, isPast } from "date-fns";
-import { Calendar as CalendarIcon, ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { Calendar as CalendarIcon, ExternalLink, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
 import TodoList from "@/components/TodoList";
 import {
   Dialog,
@@ -13,18 +14,44 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+
+type CombinedAssignment = (CanvasAssignment | CustomAssignment) & {
+  isCustom?: boolean;
+};
 
 const Index = () => {
   const { data, isLoading } = useCanvasAssignments();
   const toggleAssignment = useToggleAssignment();
+  const { data: customAssignments } = useCustomAssignments();
+  const toggleCustomAssignment = useToggleCustomAssignment();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const assignments = data?.assignments || [];
+  const canvasAssignments = data?.assignments || [];
+  const customAssignmentsList = customAssignments || [];
+
+  // Combine both Canvas and custom assignments
+  const allAssignments: CombinedAssignment[] = useMemo(() => {
+    const canvas = canvasAssignments.map((a) => ({ ...a, isCustom: false }));
+    const custom = customAssignmentsList.map((a) => ({
+      ...a,
+      id: a.id,
+      name: a.name,
+      due_at: a.due_at,
+      course_name: a.course_name || "",
+      course_code: "",
+      priority: a.priority,
+      html_url: "",
+      completed: a.completed,
+      isCustom: true,
+    }));
+    return [...canvas, ...custom];
+  }, [canvasAssignments, customAssignmentsList]);
 
   // Get assignments for selected date
   const selectedAssignments = selectedDate
-    ? assignments.filter((a) => {
+    ? allAssignments.filter((a) => {
         if (!a.due_at) return false;
         const dueDate = startOfDay(new Date(a.due_at));
         const selected = startOfDay(selectedDate);
@@ -33,7 +60,7 @@ const Index = () => {
     : [];
 
   // Get dates with assignments
-  const datesWithAssignments = assignments
+  const datesWithAssignments = allAssignments
     .filter((a) => a.due_at)
     .map((a) => startOfDay(new Date(a.due_at!)));
 
@@ -50,16 +77,23 @@ const Index = () => {
     }
   };
 
-  const handleToggleAssignment = (assignmentId: number, currentStatus: boolean) => {
-    toggleAssignment.mutate({
-      assignmentId,
-      completed: !currentStatus,
-    });
+  const handleToggleAssignment = (assignment: CombinedAssignment) => {
+    if (assignment.isCustom) {
+      toggleCustomAssignment.mutate({
+        id: assignment.id as string,
+        completed: !assignment.completed,
+      });
+    } else {
+      toggleAssignment.mutate({
+        assignmentId: assignment.id as number,
+        completed: !assignment.completed || false,
+      });
+    }
   };
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
-    const dayAssignments = assignments.filter((a) => {
+    const dayAssignments = allAssignments.filter((a) => {
       if (!a.due_at) return false;
       const dueDate = startOfDay(new Date(a.due_at));
       const currentDate = startOfDay(date);
@@ -106,7 +140,7 @@ const Index = () => {
                 }}
                 components={{
                   Day: ({ date, ...props }) => {
-                    const dayAssignments = assignments.filter((a) => {
+                    const dayAssignments = allAssignments.filter((a) => {
                       if (!a.due_at) return false;
                       const dueDate = startOfDay(new Date(a.due_at));
                       const currentDate = startOfDay(date);
@@ -172,9 +206,7 @@ const Index = () => {
                         <div className="flex items-start gap-3">
                           <Checkbox
                             checked={assignment.completed || false}
-                            onCheckedChange={() =>
-                              handleToggleAssignment(assignment.id, assignment.completed || false)
-                            }
+                            onCheckedChange={() => handleToggleAssignment(assignment)}
                             className="mt-1"
                           />
                           <div className="flex-1 min-w-0">
@@ -184,7 +216,8 @@ const Index = () => {
                                   {assignment.name}
                                 </h3>
                                 <p className="text-sm text-muted-foreground">
-                                  {assignment.course_name} ({assignment.course_code})
+                                  {assignment.course_name}
+                                  {!assignment.isCustom && 'course_code' in assignment && assignment.course_code && ` (${assignment.course_code})`}
                                 </p>
                               </div>
                               <Badge
@@ -207,7 +240,7 @@ const Index = () => {
                                   {isOverdue && " (Overdue)"}
                                 </div>
                               )}
-                              {assignment.html_url && (
+                              {!assignment.isCustom && 'html_url' in assignment && assignment.html_url && (
                                 <a
                                   href={assignment.html_url}
                                   target="_blank"
