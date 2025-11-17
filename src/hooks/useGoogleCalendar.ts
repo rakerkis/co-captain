@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useEffect, useState } from "react";
 
 export interface GoogleCalendarEvent {
   id: string;
@@ -54,9 +55,30 @@ export const useGoogleCalendarAuth = () => {
 };
 
 export const useGoogleCalendarEvents = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   return useQuery({
     queryKey: ["google-calendar-events"],
     queryFn: async () => {
+      // Return empty state if not authenticated
+      if (!isAuthenticated) {
+        return { events: [], isConnected: false };
+      }
+
       const { data, error } = await supabase.functions.invoke('google-calendar-auth/events');
 
       if (error) {
@@ -68,6 +90,7 @@ export const useGoogleCalendarEvents = () => {
 
       return { events: data.events as GoogleCalendarEvent[], isConnected: true };
     },
+    enabled: isAuthenticated, // Only run query when authenticated
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
