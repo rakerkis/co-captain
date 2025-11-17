@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 
 interface CustomTodo {
   id: string;
@@ -33,6 +36,7 @@ interface CustomTodo {
 }
 
 const TodoList = () => {
+  const { toast } = useToast();
   const { data, isLoading } = useCanvasAssignments();
   const toggleAssignment = useToggleAssignment();
   const { data: customAssignments, isLoading: customLoading } = useCustomAssignments();
@@ -43,6 +47,7 @@ const TodoList = () => {
   const [customTodos, setCustomTodos] = useState<CustomTodo[]>([]);
   const [newTodo, setNewTodo] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -53,6 +58,20 @@ const TodoList = () => {
     links: "",
     priority: "medium" as "high" | "medium" | "low",
   });
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const assignments = data?.assignments || [];
   const upcomingAssignments = assignments
@@ -94,6 +113,15 @@ const TodoList = () => {
   };
 
   const handleCreateAssignment = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to save assignments.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!formData.name.trim()) return;
 
     await createCustomAssignment.mutateAsync({
@@ -152,9 +180,21 @@ const TodoList = () => {
             <DialogHeader>
               <DialogTitle>Create Assignment</DialogTitle>
               <DialogDescription>
-                Add a new custom assignment or event to your calendar
+                {isAuthenticated 
+                  ? "Add a new custom assignment or event to your calendar"
+                  : "Log in to save custom assignments"}
               </DialogDescription>
             </DialogHeader>
+            {!isAuthenticated ? (
+              <div className="py-6 text-center space-y-4">
+                <p className="text-muted-foreground">
+                  You need to be logged in to create and save custom assignments.
+                </p>
+                <Button asChild className="w-full">
+                  <Link to="/auth">Log In / Sign Up</Link>
+                </Button>
+              </div>
+            ) : (
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name *</Label>
@@ -223,6 +263,7 @@ const TodoList = () => {
                 Create Assignment
               </Button>
             </div>
+            )}
           </DialogContent>
         </Dialog>
       </CardHeader>
