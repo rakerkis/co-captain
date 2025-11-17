@@ -6,7 +6,7 @@ import { useGoogleCalendarEvents, useGoogleCalendarAuth, useGoogleCalendarDiscon
 import { Badge } from "@/components/ui/badge";
 import { format, startOfDay, isPast } from "date-fns";
 import { Calendar as CalendarIcon, ExternalLink, Trash2 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import TodoList from "@/components/TodoList";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 type CombinedAssignment = {
   id: string | number;
@@ -32,6 +33,7 @@ type CombinedAssignment = {
 };
 
 const Index = () => {
+  const [session, setSession] = useState<any>(null);
   const { data, isLoading } = useCanvasAssignments();
   const toggleAssignment = useToggleAssignment();
   const { data: customAssignments } = useCustomAssignments();
@@ -41,6 +43,20 @@ const Index = () => {
   const googleCalendarDisconnect = useGoogleCalendarDisconnect();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const canvasAssignments = data?.assignments || [];
   const customAssignmentsList = customAssignments || [];
@@ -152,21 +168,31 @@ const Index = () => {
                   Assignment Calendar
                 </CardTitle>
                 <div className="flex gap-2">
-                  {isGoogleConnected ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => googleCalendarDisconnect.mutate()}
-                    >
-                      Disconnect Google
-                    </Button>
+                  {session ? (
+                    isGoogleConnected ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => googleCalendarDisconnect.mutate()}
+                      >
+                        Disconnect Google
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => googleCalendarAuth.mutate()}
+                      >
+                        Connect Google Calendar
+                      </Button>
+                    )
                   ) : (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => googleCalendarAuth.mutate()}
+                      asChild
                     >
-                      Connect Google Calendar
+                      <a href="/auth">Login to Connect Calendar</a>
                     </Button>
                   )}
                 </div>

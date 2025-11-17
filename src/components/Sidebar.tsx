@@ -1,23 +1,18 @@
-import { Calendar, ClipboardList, GraduationCap, BookOpen, User, Timer, LogOut } from "lucide-react";
+import { Calendar, ClipboardList, GraduationCap, BookOpen, User, Timer, LogOut, LogIn } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect, useState } from "react";
+import { Session } from "@supabase/supabase-js";
 
-const Sidebar = () => {
+interface SidebarProps {
+  session: Session | null;
+}
+
+const Sidebar = ({ session }: SidebarProps) => {
   const location = useLocation();
   const { toast } = useToast();
-  const [userEmail, setUserEmail] = useState<string>("");
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.email) {
-        setUserEmail(user.email);
-      }
-    });
-  }, []);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -79,23 +74,38 @@ const Sidebar = () => {
 
       {/* User Profile */}
       <div className="p-4 border-t border-border">
-        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sidebar-accent/50 mb-2">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-            <User className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-sidebar-foreground/60 truncate">{userEmail}</p>
-          </div>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleLogout}
-          className="w-full"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Logout
-        </Button>
+        {session ? (
+          <>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sidebar-accent/50 mb-2">
+              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                <User className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-sidebar-foreground/60 truncate">{session.user.email}</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="w-full"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </>
+        ) : (
+          <Link to="/auth">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+            >
+              <LogIn className="w-4 h-4 mr-2" />
+              Login
+            </Button>
+          </Link>
+        )}
       </div>
     </div>
   );
