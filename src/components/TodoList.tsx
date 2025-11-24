@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Calendar } from "lucide-react";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { useCustomAssignments, useCreateCustomAssignment, useToggleCustomAssignment, useDeleteCustomAssignment } from "@/hooks/useCustomAssignments";
@@ -57,6 +58,7 @@ const TodoList = () => {
     description: "",
     links: "",
     priority: "medium" as "high" | "medium" | "low",
+    displayOnCalendar: false,
   });
 
   useEffect(() => {
@@ -113,25 +115,29 @@ const TodoList = () => {
   };
 
   const handleCreateAssignment = async () => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to save assignments.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!formData.name.trim()) return;
 
-    await createCustomAssignment.mutateAsync({
-      name: formData.name,
-      due_at: formData.due_at || null,
-      course_name: formData.course_name || null,
-      description: formData.description || null,
-      links: formData.links || null,
-      priority: formData.priority,
-    });
+    // Always add to custom todos (local state)
+    setCustomTodos([
+      ...customTodos,
+      {
+        id: Date.now().toString(),
+        text: formData.name,
+        completed: false,
+      },
+    ]);
+
+    // If user wants calendar sync and is authenticated, save to database
+    if (formData.displayOnCalendar && isAuthenticated) {
+      await createCustomAssignment.mutateAsync({
+        name: formData.name,
+        due_at: formData.due_at || null,
+        course_name: formData.course_name || null,
+        description: formData.description || null,
+        links: formData.links || null,
+        priority: formData.priority,
+      });
+    }
 
     // Reset form
     setFormData({
@@ -141,6 +147,7 @@ const TodoList = () => {
       description: "",
       links: "",
       priority: "medium",
+      displayOnCalendar: false,
     });
     setDialogOpen(false);
   };
@@ -240,6 +247,22 @@ const TodoList = () => {
                     <SelectItem value="low">Low</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex items-center justify-between space-x-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="calendar-sync">Display on Calendar</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {isAuthenticated ? "Sync this task to your calendar" : "Login required for calendar sync"}
+                  </p>
+                </div>
+                <Switch
+                  id="calendar-sync"
+                  checked={formData.displayOnCalendar}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, displayOnCalendar: checked })
+                  }
+                  disabled={!isAuthenticated}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
