@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Calendar } from "lucide-react";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { useCustomAssignments, useCreateCustomAssignment, useToggleCustomAssignment, useDeleteCustomAssignment } from "@/hooks/useCustomAssignments";
@@ -50,16 +49,8 @@ const TodoList = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  // Form state
-  const [formData, setFormData] = useState({
-    name: "",
-    due_at: "",
-    course_name: "",
-    description: "",
-    links: "",
-    priority: "medium" as "high" | "medium" | "low",
-    displayOnCalendar: false,
-  });
+  // Form state for simple custom tasks
+  const [taskName, setTaskName] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -114,41 +105,19 @@ const TodoList = () => {
     setCustomTodos(customTodos.filter((todo) => todo.id !== id));
   };
 
-  const handleCreateAssignment = async () => {
-    if (!formData.name.trim()) return;
+  const handleCreateTask = () => {
+    if (!taskName.trim()) return;
 
-    // Always add to custom todos (local state)
     setCustomTodos([
       ...customTodos,
       {
         id: Date.now().toString(),
-        text: formData.name,
+        text: taskName,
         completed: false,
       },
     ]);
 
-    // If user wants calendar sync and is authenticated, save to database
-    if (formData.displayOnCalendar && isAuthenticated) {
-      await createCustomAssignment.mutateAsync({
-        name: formData.name,
-        due_at: formData.due_at || null,
-        course_name: formData.course_name || null,
-        description: formData.description || null,
-        links: formData.links || null,
-        priority: formData.priority,
-      });
-    }
-
-    // Reset form
-    setFormData({
-      name: "",
-      due_at: "",
-      course_name: "",
-      description: "",
-      links: "",
-      priority: "medium",
-      displayOnCalendar: false,
-    });
+    setTaskName("");
     setDialogOpen(false);
   };
 
@@ -185,108 +154,30 @@ const TodoList = () => {
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Create Assignment</DialogTitle>
+              <DialogTitle>Add Custom Task</DialogTitle>
               <DialogDescription>
-                {isAuthenticated 
-                  ? "Add a new custom assignment or event to your calendar"
-                  : "Log in to save custom assignments"}
+                Create a simple task to track your work
               </DialogDescription>
             </DialogHeader>
-            {!isAuthenticated ? (
-              <div className="py-6 text-center space-y-4">
-                <p className="text-muted-foreground">
-                  You need to be logged in to create and save custom assignments.
-                </p>
-                <Button asChild className="w-full">
-                  <Link to="/auth">Log In / Sign Up</Link>
-                </Button>
-              </div>
-            ) : (
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
+                <Label htmlFor="task-name">Task Name</Label>
                 <Input
-                  id="name"
-                  placeholder="Assignment name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  id="task-name"
+                  placeholder="Enter task name..."
+                  value={taskName}
+                  onChange={(e) => setTaskName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleCreateTask();
+                    }
+                  }}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="due_at">Due Date</Label>
-                <Input
-                  id="due_at"
-                  type="datetime-local"
-                  value={formData.due_at}
-                  onChange={(e) => setFormData({ ...formData, due_at: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="course_name">Course/Subject</Label>
-                <Input
-                  id="course_name"
-                  placeholder="e.g., Math 101"
-                  value={formData.course_name}
-                  onChange={(e) => setFormData({ ...formData, course_name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select
-                  value={formData.priority}
-                  onValueChange={(value: "high" | "medium" | "low") =>
-                    setFormData({ ...formData, priority: value })
-                  }
-                >
-                  <SelectTrigger id="priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between space-x-2">
-                <div className="space-y-0.5">
-                  <Label htmlFor="calendar-sync">Display on Calendar</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {isAuthenticated ? "Sync this task to your calendar" : "Login required for calendar sync"}
-                  </p>
-                </div>
-                <Switch
-                  id="calendar-sync"
-                  checked={formData.displayOnCalendar}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, displayOnCalendar: checked })
-                  }
-                  disabled={!isAuthenticated}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Assignment details..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="links">Important Links</Label>
-                <Input
-                  id="links"
-                  placeholder="https://..."
-                  value={formData.links}
-                  onChange={(e) => setFormData({ ...formData, links: e.target.value })}
-                />
-              </div>
-              <Button onClick={handleCreateAssignment} className="w-full">
-                Create Assignment
+              <Button onClick={handleCreateTask} className="w-full">
+                Add Task
               </Button>
             </div>
-            )}
           </DialogContent>
         </Dialog>
       </CardHeader>
