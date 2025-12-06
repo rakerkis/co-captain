@@ -46,8 +46,9 @@ serve(async (req) => {
 
     for (const course of courses) {
       try {
+        // Fetch assignments with submission status included
         const assignmentsResponse = await fetch(
-          `${canvasUrl}/api/v1/courses/${course.id}/assignments?per_page=100`,
+          `${canvasUrl}/api/v1/courses/${course.id}/assignments?per_page=100&include[]=submission`,
           {
             headers: {
               'Authorization': `Bearer ${canvasToken}`,
@@ -59,31 +60,43 @@ serve(async (req) => {
         if (assignmentsResponse.ok) {
           const assignments = await assignmentsResponse.json();
           
-          // Add course info and priority to each assignment
-          const enrichedAssignments = assignments.map((assignment: any) => {
-            // Calculate priority based on due date
-            let priority = 'low';
-            if (assignment.due_at) {
-              const daysUntilDue = Math.floor(
-                (new Date(assignment.due_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-              );
+          // Filter out submitted assignments and add course info/priority
+          const enrichedAssignments = assignments
+            .filter((assignment: any) => {
+              // Check if assignment has been submitted
+              const submission = assignment.submission;
+              if (!submission) return true; // No submission data, include it
               
-              if (daysUntilDue < 0) {
-                priority = 'high'; // Overdue
-              } else if (daysUntilDue <= 3) {
-                priority = 'high'; // Due within 3 days
-              } else if (daysUntilDue <= 7) {
-                priority = 'medium'; // Due within a week
+              // Filter out if workflow_state is 'submitted' or 'graded', or has submitted_at
+              const isSubmitted = submission.workflow_state === 'submitted' || 
+                                  submission.workflow_state === 'graded' ||
+                                  submission.submitted_at != null;
+              return !isSubmitted;
+            })
+            .map((assignment: any) => {
+              // Calculate priority based on due date
+              let priority = 'low';
+              if (assignment.due_at) {
+                const daysUntilDue = Math.floor(
+                  (new Date(assignment.due_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                );
+                
+                if (daysUntilDue < 0) {
+                  priority = 'high'; // Overdue
+                } else if (daysUntilDue <= 3) {
+                  priority = 'high'; // Due within 3 days
+                } else if (daysUntilDue <= 7) {
+                  priority = 'medium'; // Due within a week
+                }
               }
-            }
 
-            return {
-              ...assignment,
-              course_name: course.name,
-              course_code: course.course_code || course.name,
-              priority,
-            };
-          });
+              return {
+                ...assignment,
+                course_name: course.name,
+                course_code: course.course_code || course.name,
+                priority,
+              };
+            });
 
           allAssignments.push(...enrichedAssignments);
         }
