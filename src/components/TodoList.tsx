@@ -33,6 +33,9 @@ interface CustomTodo {
   id: string;
   text: string;
   completed: boolean;
+  dueDate?: Date;
+  subject?: string;
+  notes?: string;
 }
 
 const TodoList = () => {
@@ -49,8 +52,11 @@ const TodoList = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  // Form state for simple custom tasks
+  // Form state for custom tasks
   const [taskName, setTaskName] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState<Date | undefined>(undefined);
+  const [taskSubject, setTaskSubject] = useState("");
+  const [taskNotes, setTaskNotes] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -114,10 +120,16 @@ const TodoList = () => {
         id: Date.now().toString(),
         text: taskName,
         completed: false,
+        dueDate: taskDueDate,
+        subject: taskSubject || undefined,
+        notes: taskNotes || undefined,
       },
     ]);
 
     setTaskName("");
+    setTaskDueDate(undefined);
+    setTaskSubject("");
+    setTaskNotes("");
     setDialogOpen(false);
   };
 
@@ -156,25 +168,48 @@ const TodoList = () => {
             <DialogHeader>
               <DialogTitle>Add Custom Task</DialogTitle>
               <DialogDescription>
-                Create a simple task to track your work
+                Create a task with details to track your work
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="task-name">Task Name</Label>
+                <Label htmlFor="task-name">Task Name *</Label>
                 <Input
                   id="task-name"
                   placeholder="Enter task name..."
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleCreateTask();
-                    }
-                  }}
                 />
               </div>
-              <Button onClick={handleCreateTask} className="w-full">
+              <div className="space-y-2">
+                <Label htmlFor="task-subject">Subject / Course</Label>
+                <Input
+                  id="task-subject"
+                  placeholder="e.g., Math, Physics, Work..."
+                  value={taskSubject}
+                  onChange={(e) => setTaskSubject(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task-due-date">Due Date</Label>
+                <Input
+                  id="task-due-date"
+                  type="datetime-local"
+                  value={taskDueDate ? format(taskDueDate, "yyyy-MM-dd'T'HH:mm") : ""}
+                  onChange={(e) => setTaskDueDate(e.target.value ? new Date(e.target.value) : undefined)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task-notes">Notes</Label>
+                <Textarea
+                  id="task-notes"
+                  placeholder="Additional details..."
+                  value={taskNotes}
+                  onChange={(e) => setTaskNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+              <Button onClick={handleCreateTask} className="w-full" disabled={!taskName.trim()}>
                 Add Task
               </Button>
             </div>
@@ -313,15 +348,32 @@ const TodoList = () => {
                   checked={todo.completed}
                   onCheckedChange={() => toggleTodo(todo.id)}
                 />
-                <span
-                  className={`flex-1 text-sm ${
-                    todo.completed
-                      ? "line-through text-muted-foreground"
-                      : "text-foreground"
-                  }`}
-                >
-                  {todo.text}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm font-medium truncate ${
+                      todo.completed
+                        ? "line-through text-muted-foreground"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {todo.text}
+                  </p>
+                  {todo.subject && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {todo.subject}
+                    </p>
+                  )}
+                  {todo.dueDate && (
+                    <p className="text-xs text-muted-foreground">
+                      {format(todo.dueDate, "MMM d, h:mm a")}
+                    </p>
+                  )}
+                  {todo.notes && (
+                    <p className="text-xs text-muted-foreground/70 truncate">
+                      {todo.notes}
+                    </p>
+                  )}
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
