@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
-import { format, isPast, isFuture } from "date-fns";
+import { format, isPast, isFuture, subWeeks } from "date-fns";
 import { ExternalLink, Loader2 } from "lucide-react";
 
 const Assignments = () => {
@@ -31,7 +31,16 @@ const Assignments = () => {
     }
   };
 
-  const sortedAssignments = [...assignments].sort((a, b) => {
+  const oneWeekAgo = subWeeks(new Date(), 1);
+
+  // Filter out assignments that are overdue by more than 1 week
+  const filteredAssignments = assignments.filter((a) => {
+    if (!a.due_at) return true; // Keep assignments without due date
+    const dueDate = new Date(a.due_at);
+    return dueDate >= oneWeekAgo; // Keep if due date is within the last week or in the future
+  });
+
+  const sortedAssignments = [...filteredAssignments].sort((a, b) => {
     // Sort by completion status first (incomplete first)
     if (a.completed !== b.completed) {
       return a.completed ? 1 : -1;
