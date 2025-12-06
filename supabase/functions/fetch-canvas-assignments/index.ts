@@ -94,7 +94,15 @@ serve(async (req) => {
 
     console.log(`Found ${allAssignments.length} total assignments`);
 
-    return new Response(JSON.stringify({ assignments: allAssignments }), {
+    // Extract unique courses with their URLs
+    const coursesWithUrls = courses.map((course: any) => ({
+      id: course.id,
+      name: course.name,
+      course_code: course.course_code || course.name,
+      html_url: `${canvasUrl}/courses/${course.id}`,
+    }));
+
+    return new Response(JSON.stringify({ assignments: allAssignments, courses: coursesWithUrls }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
