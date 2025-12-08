@@ -6,6 +6,8 @@ export interface CanvasCourse {
   name: string;
   course_code: string;
   html_url: string;
+  current_grade?: string | null;
+  current_score?: number | null;
 }
 
 export const useCanvasCourses = () => {
