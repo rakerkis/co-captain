@@ -116,15 +116,47 @@ serve(async (req) => {
 
     console.log(`Found ${allAssignments.length} total assignments`);
 
-    // Extract unique courses with their URLs
-    const coursesWithUrls = courses.map((course: any) => ({
-      id: course.id,
-      name: course.name,
-      course_code: course.course_code || course.name,
-      html_url: `${canvasUrl}/courses/${course.id}`,
+    // Extract unique courses with their URLs and fetch enrollments for grades
+    const coursesWithGrades = await Promise.all(courses.map(async (course: any) => {
+      let currentGrade = null;
+      let currentScore = null;
+      
+      try {
+        // Fetch enrollment for this course to get grades
+        const enrollmentResponse = await fetch(
+          `${canvasUrl}/api/v1/courses/${course.id}/enrollments?user_id=self`,
+          {
+            headers: {
+              'Authorization': `Bearer ${canvasToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        
+        if (enrollmentResponse.ok) {
+          const enrollments = await enrollmentResponse.json();
+          // Find student enrollment
+          const studentEnrollment = enrollments.find((e: any) => e.type === 'StudentEnrollment');
+          if (studentEnrollment?.grades) {
+            currentGrade = studentEnrollment.grades.current_grade;
+            currentScore = studentEnrollment.grades.current_score;
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching enrollment for course ${course.id}:`, error);
+      }
+      
+      return {
+        id: course.id,
+        name: course.name,
+        course_code: course.course_code || course.name,
+        html_url: `${canvasUrl}/courses/${course.id}`,
+        current_grade: currentGrade,
+        current_score: currentScore,
+      };
     }));
 
-    return new Response(JSON.stringify({ assignments: allAssignments, courses: coursesWithUrls }), {
+    return new Response(JSON.stringify({ assignments: allAssignments, courses: coursesWithGrades }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
