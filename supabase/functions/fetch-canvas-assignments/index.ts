@@ -60,17 +60,26 @@ serve(async (req) => {
         if (assignmentsResponse.ok) {
           const assignments = await assignmentsResponse.json();
           
-          // Filter out submitted assignments and add course info/priority
+          // Filter out submitted/graded assignments and add course info/priority
           const enrichedAssignments = assignments
             .filter((assignment: any) => {
               // Check if assignment has been submitted
               const submission = assignment.submission;
               if (!submission) return true; // No submission data, include it
               
-              // Filter out if workflow_state is 'submitted' or 'graded', or has submitted_at
-              const isSubmitted = submission.workflow_state === 'submitted' || 
-                                  submission.workflow_state === 'graded' ||
-                                  submission.submitted_at != null;
+              // Filter out if:
+              // - workflow_state is 'submitted', 'graded', or 'pending_review'
+              // - has submitted_at timestamp
+              // - has a score or grade assigned
+              const isSubmitted = 
+                submission.workflow_state === 'submitted' || 
+                submission.workflow_state === 'graded' ||
+                submission.workflow_state === 'pending_review' ||
+                submission.submitted_at != null ||
+                submission.score != null ||
+                (submission.grade != null && submission.grade !== '');
+              
+              console.log(`Assignment ${assignment.id}: workflow_state=${submission.workflow_state}, submitted_at=${submission.submitted_at}, isSubmitted=${isSubmitted}`);
               return !isSubmitted;
             })
             .map((assignment: any) => {
