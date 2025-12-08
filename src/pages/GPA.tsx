@@ -215,7 +215,7 @@ const GPA = () => {
                               P/F
                             </Label>
                           </div>
-                          {course.current_score !== null && (
+                          {course.current_score != null && (
                             <div className="text-sm text-muted-foreground">
                               {course.current_score.toFixed(1)}%
                             </div>
