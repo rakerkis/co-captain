@@ -254,7 +254,7 @@ const Index = () => {
                           e.preventDefault();
                           handleDateClick(date);
                         }}
-                        className={`w-full h-full min-h-[80px] flex flex-col items-start justify-start p-3 rounded-2xl border transition-colors ${
+                        className={`w-full h-full min-h-[80px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors ${
                           isSelected 
                             ? "bg-primary text-primary-foreground border-primary" 
                             : "border-border hover:bg-accent"
@@ -262,16 +262,18 @@ const Index = () => {
                       >
                         <span className="text-base font-medium mb-1">{format(date, "d")}</span>
                         {dayAssignments.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-auto w-full">
-                            {uniqueCourseIds.map((courseId, idx) => (
+                          <div className="flex flex-col gap-0.5 w-full overflow-hidden flex-1">
+                            {dayAssignments.slice(0, 3).map((assignment) => (
                               <div
-                                key={idx}
-                                className={`w-2.5 h-2.5 rounded-full ${getCourseColor(courseId || 'default')}`}
-                              />
+                                key={assignment.id}
+                                className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded truncate w-full text-left`}
+                              >
+                                {assignment.name}
+                              </div>
                             ))}
-                            {dayAssignments.length > 4 && (
-                              <span className={`text-xs ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                                +{dayAssignments.length - 4}
+                            {dayAssignments.length > 3 && (
+                              <span className={`text-[10px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                                +{dayAssignments.length - 3} more
                               </span>
                             )}
                           </div>
