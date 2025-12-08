@@ -56,8 +56,8 @@ const GPA = () => {
     "F": 0.0,
   };
 
-  const getLetterGrade = (score: number | null): string => {
-    if (score === null) return "N/A";
+  const getLetterGrade = (score: number | null | undefined): string => {
+    if (score == null) return "N/A";
     if (score >= 93) return "A";
     if (score >= 90) return "A-";
     if (score >= 87) return "B+";
@@ -70,6 +70,13 @@ const GPA = () => {
     if (score >= 63) return "D";
     if (score >= 60) return "D-";
     return "F";
+  };
+
+  const getDisplayGrade = (course: CourseWithGrade): string => {
+    // Prefer Canvas letter grade if available
+    if (course.current_grade) return course.current_grade;
+    // Fall back to calculating from score
+    return getLetterGrade(course.current_score);
   };
 
   const getGradeColor = (grade: string) => {
@@ -90,7 +97,7 @@ const GPA = () => {
       // Skip pass/fail courses
       if (passFailCourses.has(course.id)) return;
       
-      const grade = course.current_grade || getLetterGrade(course.current_score);
+      const grade = getDisplayGrade(course);
       if (grade === "N/A") return;
       
       const points = gradePoints[grade] || 0;
@@ -104,7 +111,7 @@ const GPA = () => {
   const gpa = calculateGPA();
   const gradedCourses = courses.filter(c => 
     !passFailCourses.has(c.id) && 
-    (c.current_grade || c.current_score !== null)
+    (c.current_grade || c.current_score != null)
   ).length;
 
   if (isLoading) {
@@ -188,7 +195,7 @@ const GPA = () => {
             ) : (
               <div className="space-y-3">
                 {courses.map((course) => {
-                  const grade = course.current_grade || getLetterGrade(course.current_score);
+                  const grade = getDisplayGrade(course);
                   const isPassFail = passFailCourses.has(course.id);
                   
                   return (
