@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2, Calendar } from "lucide-react";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { useCustomAssignments, useCreateCustomAssignment, useToggleCustomAssignment, useDeleteCustomAssignment } from "@/hooks/useCustomAssignments";
+import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import {
@@ -46,6 +47,7 @@ const TodoList = () => {
   const createCustomAssignment = useCreateCustomAssignment();
   const toggleCustomAssignment = useToggleCustomAssignment();
   const deleteCustomAssignment = useDeleteCustomAssignment();
+  const { hiddenAssignmentIds } = useHiddenCourses();
   
   const [customTodos, setCustomTodos] = useState<CustomTodo[]>([]);
   const [newTodo, setNewTodo] = useState("");
@@ -74,7 +76,7 @@ const TodoList = () => {
 
   const assignments = data?.assignments || [];
   const upcomingAssignments = assignments
-    .filter((a) => a.due_at && new Date(a.due_at) >= new Date())
+    .filter((a: any) => a.due_at && new Date(a.due_at) >= new Date() && !hiddenAssignmentIds.includes(a.course_id))
     .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime())
     .slice(0, 5);
 

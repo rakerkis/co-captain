@@ -1,35 +1,68 @@
 import { useState, useEffect, useCallback } from "react";
 
-const HIDDEN_COURSES_KEY = "hidden-courses";
+const HIDDEN_CALENDAR_KEY = "hidden-courses-calendar";
+const HIDDEN_ASSIGNMENTS_KEY = "hidden-courses-assignments";
 
 export const useHiddenCourses = () => {
-  const [hiddenCourseIds, setHiddenCourseIds] = useState<number[]>([]);
+  const [hiddenCalendarIds, setHiddenCalendarIds] = useState<number[]>([]);
+  const [hiddenAssignmentIds, setHiddenAssignmentIds] = useState<number[]>([]);
 
   useEffect(() => {
-    const stored = localStorage.getItem(HIDDEN_COURSES_KEY);
-    if (stored) {
+    const storedCalendar = localStorage.getItem(HIDDEN_CALENDAR_KEY);
+    if (storedCalendar) {
       try {
-        setHiddenCourseIds(JSON.parse(stored));
+        setHiddenCalendarIds(JSON.parse(storedCalendar));
       } catch {
-        setHiddenCourseIds([]);
+        setHiddenCalendarIds([]);
+      }
+    }
+
+    const storedAssignments = localStorage.getItem(HIDDEN_ASSIGNMENTS_KEY);
+    if (storedAssignments) {
+      try {
+        setHiddenAssignmentIds(JSON.parse(storedAssignments));
+      } catch {
+        setHiddenAssignmentIds([]);
       }
     }
   }, []);
 
-  const toggleCourseVisibility = useCallback((courseId: number) => {
-    setHiddenCourseIds((prev) => {
+  const toggleCalendarVisibility = useCallback((courseId: number) => {
+    setHiddenCalendarIds((prev) => {
       const newHidden = prev.includes(courseId)
         ? prev.filter((id) => id !== courseId)
         : [...prev, courseId];
-      localStorage.setItem(HIDDEN_COURSES_KEY, JSON.stringify(newHidden));
+      localStorage.setItem(HIDDEN_CALENDAR_KEY, JSON.stringify(newHidden));
       return newHidden;
     });
   }, []);
 
-  const isCourseHidden = useCallback(
-    (courseId: number) => hiddenCourseIds.includes(courseId),
-    [hiddenCourseIds]
+  const toggleAssignmentsVisibility = useCallback((courseId: number) => {
+    setHiddenAssignmentIds((prev) => {
+      const newHidden = prev.includes(courseId)
+        ? prev.filter((id) => id !== courseId)
+        : [...prev, courseId];
+      localStorage.setItem(HIDDEN_ASSIGNMENTS_KEY, JSON.stringify(newHidden));
+      return newHidden;
+    });
+  }, []);
+
+  const isCourseHiddenFromCalendar = useCallback(
+    (courseId: number) => hiddenCalendarIds.includes(courseId),
+    [hiddenCalendarIds]
   );
 
-  return { hiddenCourseIds, toggleCourseVisibility, isCourseHidden };
+  const isCourseHiddenFromAssignments = useCallback(
+    (courseId: number) => hiddenAssignmentIds.includes(courseId),
+    [hiddenAssignmentIds]
+  );
+
+  return {
+    hiddenCalendarIds,
+    hiddenAssignmentIds,
+    toggleCalendarVisibility,
+    toggleAssignmentsVisibility,
+    isCourseHiddenFromCalendar,
+    isCourseHiddenFromAssignments,
+  };
 };

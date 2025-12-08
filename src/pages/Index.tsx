@@ -42,7 +42,7 @@ const Index = () => {
   const { data: googleCalendarData } = useGoogleCalendarEvents();
   const googleCalendarAuth = useGoogleCalendarAuth();
   const googleCalendarDisconnect = useGoogleCalendarDisconnect();
-  const { hiddenCourseIds } = useHiddenCourses();
+  const { hiddenCalendarIds } = useHiddenCourses();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -68,7 +68,7 @@ const Index = () => {
   // Combine Canvas, custom assignments, and Google Calendar events (filter hidden courses)
   const allAssignments: CombinedAssignment[] = useMemo(() => {
     const canvas = canvasAssignments
-      .filter((a: any) => !hiddenCourseIds.includes(a.course_id))
+      .filter((a: any) => !hiddenCalendarIds.includes(a.course_id))
       .map((a) => ({ ...a, isCustom: false, isGoogleEvent: false }));
     const custom = customAssignmentsList.map((a) => ({
       ...a,
@@ -97,7 +97,7 @@ const Index = () => {
       description: event.description,
     }));
     return [...canvas, ...custom, ...google];
-  }, [canvasAssignments, customAssignmentsList, googleEvents, hiddenCourseIds]);
+  }, [canvasAssignments, customAssignmentsList, googleEvents, hiddenCalendarIds]);
 
   // Get assignments for selected date
   const selectedAssignments = selectedDate

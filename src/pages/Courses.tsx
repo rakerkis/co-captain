@@ -23,7 +23,12 @@ const COURSE_COLORS = [
 
 const Courses = () => {
   const { data: courses, isLoading } = useCanvasCourses();
-  const { toggleCourseVisibility, isCourseHidden } = useHiddenCourses();
+  const { 
+    toggleCalendarVisibility, 
+    toggleAssignmentsVisibility, 
+    isCourseHiddenFromCalendar, 
+    isCourseHiddenFromAssignments 
+  } = useHiddenCourses();
 
   const getCourseColor = (index: number) => {
     return COURSE_COLORS[index % COURSE_COLORS.length];
@@ -87,15 +92,27 @@ const Courses = () => {
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-56 bg-popover" align="end">
-                        <div className="flex items-center justify-between gap-2">
-                          <Label htmlFor={`show-calendar-${course.id}`} className="text-sm">
-                            Show on calendar
-                          </Label>
-                          <Switch
-                            id={`show-calendar-${course.id}`}
-                            checked={!isCourseHidden(course.id)}
-                            onCheckedChange={() => toggleCourseVisibility(course.id)}
-                          />
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor={`show-calendar-${course.id}`} className="text-sm">
+                              Show on calendar
+                            </Label>
+                            <Switch
+                              id={`show-calendar-${course.id}`}
+                              checked={!isCourseHiddenFromCalendar(course.id)}
+                              onCheckedChange={() => toggleCalendarVisibility(course.id)}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor={`show-assignments-${course.id}`} className="text-sm">
+                              Show assignments
+                            </Label>
+                            <Switch
+                              id={`show-assignments-${course.id}`}
+                              checked={!isCourseHiddenFromAssignments(course.id)}
+                              onCheckedChange={() => toggleAssignmentsVisibility(course.id)}
+                            />
+                          </div>
                         </div>
                       </PopoverContent>
                     </Popover>
