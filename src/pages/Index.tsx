@@ -262,11 +262,11 @@ const Index = () => {
                       >
                         <span className="text-sm font-medium mb-0.5">{format(date, "d")}</span>
                         {dayAssignments.length > 0 && (
-                          <div className="flex flex-col gap-0.5 w-full overflow-hidden flex-1 min-h-0">
+                          <div className="flex flex-col gap-0.5 w-full overflow-hidden flex-1 min-h-0 min-w-0">
                             {dayAssignments.slice(0, 2).map((assignment) => (
                               <div
                                 key={assignment.id}
-                                className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded truncate w-full text-left`}
+                                className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap w-full text-left`}
                               >
                                 {assignment.name}
                               </div>
