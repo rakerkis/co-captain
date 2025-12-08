@@ -4,12 +4,63 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { format, isPast, isFuture, subWeeks } from "date-fns";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useCreateCustomAssignment } from "@/hooks/useCustomAssignments";
+import { toast } from "sonner";
 
 const Assignments = () => {
   const { data, isLoading } = useCanvasAssignments();
   const toggleAssignment = useToggleAssignment();
   const { hiddenAssignmentIds } = useHiddenCourses();
+  const createCustomAssignment = useCreateCustomAssignment();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newTask, setNewTask] = useState({
+    name: "",
+    course_name: "",
+    due_at: "",
+    description: "",
+    priority: "medium" as "high" | "medium" | "low",
+  });
+
+  const handleCreateTask = () => {
+    if (!newTask.name.trim()) {
+      toast.error("Please enter a task name");
+      return;
+    }
+    createCustomAssignment.mutate({
+      name: newTask.name,
+      course_name: newTask.course_name || null,
+      due_at: newTask.due_at || null,
+      description: newTask.description || null,
+      links: null,
+      priority: newTask.priority,
+    }, {
+      onSuccess: () => {
+        toast.success("Task created successfully");
+        setDialogOpen(false);
+        setNewTask({ name: "", course_name: "", due_at: "", description: "", priority: "medium" });
+      },
+    });
+  };
 
   const handleToggleAssignment = (assignmentId: number, currentStatus: boolean) => {
     toggleAssignment.mutate({
@@ -58,7 +109,78 @@ const Assignments = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
-        <h1 className="text-3xl font-bold text-foreground mb-6">All Assignments</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-foreground">All Assignments</h1>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="icon" className="rounded-full">
+                <Plus className="w-5 h-5" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Task</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Task Name *</Label>
+                  <Input
+                    id="name"
+                    value={newTask.name}
+                    onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                    placeholder="Enter task name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="course">Subject/Course</Label>
+                  <Input
+                    id="course"
+                    value={newTask.course_name}
+                    onChange={(e) => setNewTask({ ...newTask, course_name: e.target.value })}
+                    placeholder="Enter subject or course"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="due">Due Date</Label>
+                  <Input
+                    id="due"
+                    type="datetime-local"
+                    value={newTask.due_at}
+                    onChange={(e) => setNewTask({ ...newTask, due_at: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select
+                    value={newTask.priority}
+                    onValueChange={(value: "high" | "medium" | "low") => setNewTask({ ...newTask, priority: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Notes</Label>
+                  <Textarea
+                    id="description"
+                    value={newTask.description}
+                    onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                    placeholder="Add any notes..."
+                  />
+                </div>
+                <Button onClick={handleCreateTask} className="w-full" disabled={createCustomAssignment.isPending}>
+                  {createCustomAssignment.isPending ? "Creating..." : "Create Task"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">

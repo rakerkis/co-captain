@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { format, startOfDay, isPast } from "date-fns";
 import { Calendar as CalendarIcon, ExternalLink, Trash2 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
-import TodoList from "@/components/TodoList";
+
 import {
   Dialog,
   DialogContent,
@@ -165,132 +165,124 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6 h-[calc(100vh-3rem)]">
-        {/* Calendar and To-Do List */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-          {/* Calendar */}
-          <Card className="lg:col-span-2 flex flex-col h-full">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <CalendarIcon className="w-5 h-5" />
-                  Assignment Calendar
-                </CardTitle>
-                <div className="flex gap-2">
-                  {session ? (
-                    isGoogleConnected ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => googleCalendarDisconnect.mutate()}
-                      >
-                        Disconnect Google
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => googleCalendarAuth.mutate()}
-                      >
-                        Connect Google Calendar
-                      </Button>
-                    )
+        {/* Calendar */}
+        <Card className="flex flex-col h-full">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5" />
+                Assignment Calendar
+              </CardTitle>
+              <div className="flex gap-2">
+                {session ? (
+                  isGoogleConnected ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => googleCalendarDisconnect.mutate()}
+                    >
+                      Disconnect Google
+                    </Button>
                   ) : (
                     <Button
                       variant="outline"
                       size="sm"
-                      asChild
+                      onClick={() => googleCalendarAuth.mutate()}
                     >
-                      <a href="/auth">Login to Connect Calendar</a>
+                      Connect Google Calendar
                     </Button>
-                  )}
-                </div>
+                  )
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                  >
+                    <a href="/auth">Login to Connect Calendar</a>
+                  </Button>
+                )}
               </div>
-            </CardHeader>
-            <CardContent className="flex-1 flex items-center justify-center overflow-hidden p-6">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                className="w-full h-full pointer-events-auto flex flex-col"
-                classNames={{
-                  months: "flex flex-col h-full w-full",
-                  month: "flex flex-col h-full w-full space-y-4",
-                  caption: "flex justify-center pt-1 relative items-center mb-4",
-                  caption_label: "text-lg font-semibold",
-                  nav: "space-x-1 flex items-center",
-                  nav_button: "h-9 w-9 bg-transparent hover:bg-accent rounded-lg",
-                  nav_button_previous: "absolute left-1",
-                  nav_button_next: "absolute right-1",
-                  table: "w-full border-collapse flex-1",
-                  head_row: "flex w-full mb-2",
-                  head_cell: "text-muted-foreground rounded-md w-full font-medium text-sm flex-1 text-center",
-                  row: "flex w-full mt-2 flex-1",
-                  cell: "relative p-0 text-center flex-1 focus-within:relative focus-within:z-20 min-w-0 overflow-hidden",
-                  day: "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-2xl border border-border hover:bg-accent transition-colors",
-                  day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                  day_today: "bg-accent text-accent-foreground",
-                  day_outside: "text-muted-foreground opacity-50",
-                  day_disabled: "text-muted-foreground opacity-50",
-                  day_hidden: "invisible",
-                }}
-                components={{
-                  Day: ({ date, ...props }) => {
-                    const dayAssignments = allAssignments.filter((a) => {
-                      if (!a.due_at) return false;
-                      const dueDate = startOfDay(new Date(a.due_at));
-                      const currentDate = startOfDay(date);
-                      return dueDate.getTime() === currentDate.getTime();
-                    });
-                    
-                    const isSelected = selectedDate && startOfDay(date).getTime() === startOfDay(selectedDate).getTime();
-                    
-                    // Get unique course colors for this day (max 4)
-                    const uniqueCourseIds = [...new Set(dayAssignments.map(a => a.course_id))].slice(0, 4);
-                    
-                    return (
-                      <button
-                        {...props}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleDateClick(date);
-                        }}
-                        className={`w-full h-[90px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors overflow-hidden max-w-full ${
-                          isSelected 
-                            ? "bg-primary text-primary-foreground border-primary" 
-                            : "border-border hover:bg-accent"
-                        }`}
-                      >
-                        <span className="text-sm font-medium mb-0.5">{format(date, "d")}</span>
-                        {dayAssignments.length > 0 && (
-                          <div className="flex flex-col gap-0.5 overflow-hidden flex-1 min-h-0 w-full min-w-0 max-w-full">
-                            {dayAssignments.slice(0, 2).map((assignment) => (
-                              <div
-                                key={assignment.id}
-                                className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap max-w-full`}
-                              >
-                                {assignment.name}
-                              </div>
-                            ))}
-                            {dayAssignments.length > 2 && (
-                              <span className={`text-[10px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                                +{dayAssignments.length - 2} more
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  },
-                }}
-              />
-            </CardContent>
-          </Card>
-
-          {/* To-Do List */}
-          <div className="h-full overflow-auto">
-            <TodoList />
-          </div>
-        </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 flex items-center justify-center overflow-hidden p-6">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              className="w-full h-full pointer-events-auto flex flex-col"
+              classNames={{
+                months: "flex flex-col h-full w-full",
+                month: "flex flex-col h-full w-full space-y-4",
+                caption: "flex justify-center pt-1 relative items-center mb-4",
+                caption_label: "text-lg font-semibold",
+                nav: "space-x-1 flex items-center",
+                nav_button: "h-9 w-9 bg-transparent hover:bg-accent rounded-lg",
+                nav_button_previous: "absolute left-1",
+                nav_button_next: "absolute right-1",
+                table: "w-full border-collapse flex-1",
+                head_row: "flex w-full mb-2",
+                head_cell: "text-muted-foreground rounded-md w-full font-medium text-sm flex-1 text-center",
+                row: "flex w-full mt-2 flex-1",
+                cell: "relative p-0 text-center flex-1 focus-within:relative focus-within:z-20 min-w-0 overflow-hidden",
+                day: "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-2xl border border-border hover:bg-accent transition-colors",
+                day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                day_today: "bg-accent text-accent-foreground",
+                day_outside: "text-muted-foreground opacity-50",
+                day_disabled: "text-muted-foreground opacity-50",
+                day_hidden: "invisible",
+              }}
+              components={{
+                Day: ({ date, ...props }) => {
+                  const dayAssignments = allAssignments.filter((a) => {
+                    if (!a.due_at) return false;
+                    const dueDate = startOfDay(new Date(a.due_at));
+                    const currentDate = startOfDay(date);
+                    return dueDate.getTime() === currentDate.getTime();
+                  });
+                  
+                  const isSelected = selectedDate && startOfDay(date).getTime() === startOfDay(selectedDate).getTime();
+                  
+                  // Get unique course colors for this day (max 4)
+                  const uniqueCourseIds = [...new Set(dayAssignments.map(a => a.course_id))].slice(0, 4);
+                  
+                  return (
+                    <button
+                      {...props}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleDateClick(date);
+                      }}
+                      className={`w-full h-[90px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors overflow-hidden max-w-full ${
+                        isSelected 
+                          ? "bg-primary text-primary-foreground border-primary" 
+                          : "border-border hover:bg-accent"
+                      }`}
+                    >
+                      <span className="text-sm font-medium mb-0.5">{format(date, "d")}</span>
+                      {dayAssignments.length > 0 && (
+                        <div className="flex flex-col gap-0.5 overflow-hidden flex-1 min-h-0 w-full min-w-0 max-w-full">
+                          {dayAssignments.slice(0, 2).map((assignment) => (
+                            <div
+                              key={assignment.id}
+                              className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap max-w-full`}
+                            >
+                              {assignment.name}
+                            </div>
+                          ))}
+                          {dayAssignments.length > 2 && (
+                            <span className={`text-[10px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                              +{dayAssignments.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                },
+              }}
+            />
+          </CardContent>
+        </Card>
 
         {/* Assignment Details Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
