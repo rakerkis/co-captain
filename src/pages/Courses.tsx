@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookOpen, ExternalLink, Loader2, Settings } from "lucide-react";
 import { useCanvasCourses, CanvasCourse } from "@/hooks/useCanvasCourses";
@@ -9,16 +10,22 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { getCourseColor } from "@/lib/courseColors";
+import { getCourseColor, setCustomCourseColor, COURSE_COLORS } from "@/lib/courseColors";
 
 const Courses = () => {
   const { data: courses, isLoading } = useCanvasCourses();
+  const [, forceUpdate] = useState(0);
   const { 
     toggleCalendarVisibility, 
     toggleAssignmentsVisibility, 
     isCourseHiddenFromCalendar, 
     isCourseHiddenFromAssignments 
   } = useHiddenCourses();
+
+  const handleColorChange = (courseId: number, colorClass: string) => {
+    setCustomCourseColor(courseId, colorClass);
+    forceUpdate((n) => n + 1);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -77,8 +84,25 @@ const Courses = () => {
                           <Settings className="w-4 h-4 text-muted-foreground" />
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-56 bg-popover" align="end">
-                        <div className="space-y-3">
+                      <PopoverContent className="w-64 bg-popover" align="end">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Course Color</Label>
+                            <div className="grid grid-cols-6 gap-1.5">
+                              {COURSE_COLORS.map((color) => (
+                                <button
+                                  key={color.class}
+                                  onClick={() => handleColorChange(course.id, color.class)}
+                                  className={`w-7 h-7 rounded-md ${color.class} hover:scale-110 transition-transform ${
+                                    getCourseColor(course.id) === color.class
+                                      ? "ring-2 ring-white ring-offset-2 ring-offset-background"
+                                      : ""
+                                  }`}
+                                  title={color.name}
+                                />
+                              ))}
+                            </div>
+                          </div>
                           <div className="flex items-center justify-between gap-2">
                             <Label htmlFor={`show-calendar-${course.id}`} className="text-sm">
                               Show on calendar
