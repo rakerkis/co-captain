@@ -254,16 +254,16 @@ const Index = () => {
                           e.preventDefault();
                           handleDateClick(date);
                         }}
-                        className={`w-full h-full min-h-[80px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors ${
+                        className={`w-full h-[90px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors overflow-hidden ${
                           isSelected 
                             ? "bg-primary text-primary-foreground border-primary" 
                             : "border-border hover:bg-accent"
                         }`}
                       >
-                        <span className="text-base font-medium mb-1">{format(date, "d")}</span>
+                        <span className="text-sm font-medium mb-0.5">{format(date, "d")}</span>
                         {dayAssignments.length > 0 && (
-                          <div className="flex flex-col gap-0.5 w-full overflow-hidden flex-1">
-                            {dayAssignments.slice(0, 3).map((assignment) => (
+                          <div className="flex flex-col gap-0.5 w-full overflow-hidden flex-1 min-h-0">
+                            {dayAssignments.slice(0, 2).map((assignment) => (
                               <div
                                 key={assignment.id}
                                 className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded truncate w-full text-left`}
@@ -271,9 +271,9 @@ const Index = () => {
                                 {assignment.name}
                               </div>
                             ))}
-                            {dayAssignments.length > 3 && (
+                            {dayAssignments.length > 2 && (
                               <span className={`text-[10px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                                +{dayAssignments.length - 3} more
+                                +{dayAssignments.length - 2} more
                               </span>
                             )}
                           </div>
