@@ -3,6 +3,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useCanvasAssignments, useToggleAssignment, type CanvasAssignment } from "@/hooks/useCanvasAssignments";
 import { useCustomAssignments, useToggleCustomAssignment, type CustomAssignment } from "@/hooks/useCustomAssignments";
 import { useGoogleCalendarEvents, useGoogleCalendarAuth, useGoogleCalendarDisconnect, type GoogleCalendarEvent } from "@/hooks/useGoogleCalendar";
+import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { Badge } from "@/components/ui/badge";
 import { format, startOfDay, isPast } from "date-fns";
 import { Calendar as CalendarIcon, ExternalLink, Trash2 } from "lucide-react";
@@ -41,6 +42,7 @@ const Index = () => {
   const { data: googleCalendarData } = useGoogleCalendarEvents();
   const googleCalendarAuth = useGoogleCalendarAuth();
   const googleCalendarDisconnect = useGoogleCalendarDisconnect();
+  const { hiddenCourseIds } = useHiddenCourses();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -63,9 +65,11 @@ const Index = () => {
   const googleEvents = googleCalendarData?.events || [];
   const isGoogleConnected = googleCalendarData?.isConnected || false;
 
-  // Combine Canvas, custom assignments, and Google Calendar events
+  // Combine Canvas, custom assignments, and Google Calendar events (filter hidden courses)
   const allAssignments: CombinedAssignment[] = useMemo(() => {
-    const canvas = canvasAssignments.map((a) => ({ ...a, isCustom: false, isGoogleEvent: false }));
+    const canvas = canvasAssignments
+      .filter((a: any) => !hiddenCourseIds.includes(a.course_id))
+      .map((a) => ({ ...a, isCustom: false, isGoogleEvent: false }));
     const custom = customAssignmentsList.map((a) => ({
       ...a,
       id: a.id,
@@ -93,7 +97,7 @@ const Index = () => {
       description: event.description,
     }));
     return [...canvas, ...custom, ...google];
-  }, [canvasAssignments, customAssignmentsList, googleEvents]);
+  }, [canvasAssignments, customAssignmentsList, googleEvents, hiddenCourseIds]);
 
   // Get assignments for selected date
   const selectedAssignments = selectedDate
