@@ -225,7 +225,7 @@ const Index = () => {
                   head_row: "flex w-full mb-2",
                   head_cell: "text-muted-foreground rounded-md w-full font-medium text-sm flex-1 text-center",
                   row: "flex w-full mt-2 flex-1",
-                  cell: "relative p-0 text-center flex-1 focus-within:relative focus-within:z-20",
+                  cell: "relative p-0 text-center flex-1 focus-within:relative focus-within:z-20 min-w-0 overflow-hidden",
                   day: "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-2xl border border-border hover:bg-accent transition-colors",
                   day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
                   day_today: "bg-accent text-accent-foreground",
@@ -254,7 +254,7 @@ const Index = () => {
                           e.preventDefault();
                           handleDateClick(date);
                         }}
-                        className={`w-full h-[90px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors overflow-hidden ${
+                        className={`w-full h-[90px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors overflow-hidden max-w-full ${
                           isSelected 
                             ? "bg-primary text-primary-foreground border-primary" 
                             : "border-border hover:bg-accent"
@@ -262,11 +262,11 @@ const Index = () => {
                       >
                         <span className="text-sm font-medium mb-0.5">{format(date, "d")}</span>
                         {dayAssignments.length > 0 && (
-                          <div className="flex flex-col gap-0.5 w-full overflow-hidden flex-1 min-h-0 min-w-0">
+                          <div className="flex flex-col gap-0.5 overflow-hidden flex-1 min-h-0 w-full min-w-0 max-w-full">
                             {dayAssignments.slice(0, 2).map((assignment) => (
                               <div
                                 key={assignment.id}
-                                className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap w-full text-left`}
+                                className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap max-w-full`}
                               >
                                 {assignment.name}
                               </div>
