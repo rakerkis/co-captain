@@ -1,6 +1,14 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { BookOpen, ExternalLink, Loader2 } from "lucide-react";
+import { BookOpen, ExternalLink, Loader2, Settings } from "lucide-react";
 import { useCanvasCourses, CanvasCourse } from "@/hooks/useCanvasCourses";
+import { useHiddenCourses } from "@/hooks/useHiddenCourses";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const COURSE_COLORS = [
   "bg-blue-500",
@@ -15,6 +23,7 @@ const COURSE_COLORS = [
 
 const Courses = () => {
   const { data: courses, isLoading } = useCanvasCourses();
+  const { toggleCourseVisibility, isCourseHidden } = useHiddenCourses();
 
   const getCourseColor = (index: number) => {
     return COURSE_COLORS[index % COURSE_COLORS.length];
@@ -38,22 +47,24 @@ const Courses = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {courses.map((course: CanvasCourse, index: number) => (
-              <a
-                key={course.id}
-                href={course.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block"
-              >
-                <Card className="hover:shadow-lg transition-all cursor-pointer group h-full">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div
-                        className={`w-12 h-12 rounded-lg ${getCourseColor(index)} flex items-center justify-center shrink-0`}
+              <Card key={course.id} className="hover:shadow-lg transition-all group h-full relative">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <a
+                      href={course.html_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`w-12 h-12 rounded-lg ${getCourseColor(index)} flex items-center justify-center shrink-0`}
+                    >
+                      <BookOpen className="w-6 h-6 text-white" />
+                    </a>
+                    <div className="flex-1 min-w-0">
+                      <a
+                        href={course.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block"
                       >
-                        <BookOpen className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-sm text-muted-foreground">
                           {course.course_code}
                         </h3>
@@ -64,11 +75,33 @@ const Courses = () => {
                           <span>Open in Canvas</span>
                           <ExternalLink className="w-3 h-3" />
                         </div>
-                      </div>
+                      </a>
                     </div>
-                  </CardContent>
-                </Card>
-              </a>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-2 rounded-lg hover:bg-accent transition-colors"
+                        >
+                          <Settings className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-56 bg-popover" align="end">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label htmlFor={`show-calendar-${course.id}`} className="text-sm">
+                            Show on calendar
+                          </Label>
+                          <Switch
+                            id={`show-calendar-${course.id}`}
+                            checked={!isCourseHidden(course.id)}
+                            onCheckedChange={() => toggleCourseVisibility(course.id)}
+                          />
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
