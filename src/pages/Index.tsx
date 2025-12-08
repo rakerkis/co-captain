@@ -18,6 +18,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { getCourseColor } from "@/lib/courseColors";
 
 type CombinedAssignment = {
   id: string | number;
@@ -25,6 +26,7 @@ type CombinedAssignment = {
   due_at: string | null | undefined;
   course_name: string;
   course_code: string;
+  course_id?: number | string;
   priority: string;
   html_url: string;
   completed: boolean;
@@ -69,7 +71,7 @@ const Index = () => {
   const allAssignments: CombinedAssignment[] = useMemo(() => {
     const canvas = canvasAssignments
       .filter((a: any) => !hiddenCalendarIds.includes(a.course_id))
-      .map((a) => ({ ...a, isCustom: false, isGoogleEvent: false }));
+      .map((a: any) => ({ ...a, course_id: a.course_id, isCustom: false, isGoogleEvent: false }));
     const custom = customAssignmentsList.map((a) => ({
       ...a,
       id: a.id,
@@ -77,6 +79,7 @@ const Index = () => {
       due_at: a.due_at,
       course_name: a.course_name || "",
       course_code: "",
+      course_id: `custom-${a.id}`,
       priority: a.priority,
       html_url: "",
       completed: a.completed,
@@ -89,6 +92,7 @@ const Index = () => {
       due_at: event.start.dateTime || event.start.date,
       course_name: "Google Calendar",
       course_code: "",
+      course_id: "google-calendar",
       priority: "medium" as const,
       html_url: event.htmlLink || "",
       completed: false,
@@ -240,6 +244,9 @@ const Index = () => {
                     
                     const isSelected = selectedDate && startOfDay(date).getTime() === startOfDay(selectedDate).getTime();
                     
+                    // Get unique course colors for this day (max 4)
+                    const uniqueCourseIds = [...new Set(dayAssignments.map(a => a.course_id))].slice(0, 4);
+                    
                     return (
                       <button
                         {...props}
@@ -255,11 +262,19 @@ const Index = () => {
                       >
                         <span className="text-base font-medium mb-1">{format(date, "d")}</span>
                         {dayAssignments.length > 0 && (
-                          <span className={`text-xs mt-auto truncate w-full text-left ${
-                            isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
-                          }`}>
-                            {dayAssignments[0].course_name?.slice(0, 8)}...
-                          </span>
+                          <div className="flex flex-wrap gap-1 mt-auto w-full">
+                            {uniqueCourseIds.map((courseId, idx) => (
+                              <div
+                                key={idx}
+                                className={`w-2.5 h-2.5 rounded-full ${getCourseColor(courseId || 'default')}`}
+                              />
+                            ))}
+                            {dayAssignments.length > 4 && (
+                              <span className={`text-xs ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                                +{dayAssignments.length - 4}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </button>
                     );
@@ -304,6 +319,9 @@ const Index = () => {
                           )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start gap-3 mb-2">
+                              <div
+                                className={`w-3 h-3 rounded-full mt-1.5 shrink-0 ${getCourseColor(assignment.course_id || 'default')}`}
+                              />
                               <div className="flex-1 min-w-0">
                                 <h3 className={`font-semibold text-lg ${assignment.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                                   {assignment.name}

@@ -9,17 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-
-const COURSE_COLORS = [
-  "bg-blue-500",
-  "bg-green-500",
-  "bg-purple-500",
-  "bg-orange-500",
-  "bg-pink-500",
-  "bg-red-500",
-  "bg-teal-500",
-  "bg-indigo-500",
-];
+import { getCourseColor } from "@/lib/courseColors";
 
 const Courses = () => {
   const { data: courses, isLoading } = useCanvasCourses();
@@ -29,10 +19,6 @@ const Courses = () => {
     isCourseHiddenFromCalendar, 
     isCourseHiddenFromAssignments 
   } = useHiddenCourses();
-
-  const getCourseColor = (index: number) => {
-    return COURSE_COLORS[index % COURSE_COLORS.length];
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -59,7 +45,7 @@ const Courses = () => {
                       href={course.html_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-lg ${getCourseColor(index)} flex items-center justify-center shrink-0`}
+                      className={`w-12 h-12 rounded-lg ${getCourseColor(course.id)} flex items-center justify-center shrink-0`}
                     >
                       <BookOpen className="w-6 h-6 text-white" />
                     </a>
