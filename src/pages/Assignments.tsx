@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { format, isPast, isFuture, subWeeks } from "date-fns";
-import { ExternalLink, Loader2, Plus } from "lucide-react";
+import { ExternalLink, Loader2, Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useCreateCustomAssignment } from "@/hooks/useCustomAssignments";
+import { useCreateCustomAssignment, useUpdateCustomAssignment } from "@/hooks/useCustomAssignments";
 import { toast } from "sonner";
 
 const Assignments = () => {
@@ -33,7 +33,10 @@ const Assignments = () => {
   const toggleAssignment = useToggleAssignment();
   const { hiddenAssignmentIds } = useHiddenCourses();
   const createCustomAssignment = useCreateCustomAssignment();
+  const updateCustomAssignment = useUpdateCustomAssignment();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [newTask, setNewTask] = useState({
     name: "",
     course_name: "",
@@ -61,6 +64,41 @@ const Assignments = () => {
         toast.success(newTask.type === "event" ? "Event created successfully" : "Task created successfully");
         setDialogOpen(false);
         setNewTask({ name: "", course_name: "", due_at: "", description: "", priority: "medium", type: "assignment" });
+      },
+    });
+  };
+
+  const handleEditAssignment = (assignment: any) => {
+    setEditingAssignment({
+      id: assignment.id,
+      name: assignment.name,
+      course_name: assignment.course_name || "",
+      due_at: assignment.due_at ? format(new Date(assignment.due_at), "yyyy-MM-dd'T'HH:mm") : "",
+      description: assignment.description || "",
+      priority: assignment.priority || "medium",
+      type: assignment.type || "assignment",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateAssignment = () => {
+    if (!editingAssignment?.name.trim()) {
+      toast.error("Please enter a name");
+      return;
+    }
+    updateCustomAssignment.mutate({
+      id: editingAssignment.id,
+      name: editingAssignment.name,
+      course_name: editingAssignment.course_name || null,
+      due_at: editingAssignment.due_at || null,
+      description: editingAssignment.description || null,
+      priority: editingAssignment.priority,
+      type: editingAssignment.type,
+    }, {
+      onSuccess: () => {
+        toast.success("Updated successfully");
+        setEditDialogOpen(false);
+        setEditingAssignment(null);
       },
     });
   };
@@ -200,6 +238,86 @@ const Assignments = () => {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* Edit Dialog */}
+          <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit {editingAssignment?.type === "event" ? "Event" : "Task"}</DialogTitle>
+              </DialogHeader>
+              {editingAssignment && (
+                <div className="space-y-4 mt-4">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="edit-type-toggle">Type</Label>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${editingAssignment.type === "assignment" ? "text-foreground" : "text-muted-foreground"}`}>Assignment</span>
+                      <Switch
+                        id="edit-type-toggle"
+                        checked={editingAssignment.type === "event"}
+                        onCheckedChange={(checked) => setEditingAssignment({ ...editingAssignment, type: checked ? "event" : "assignment" })}
+                      />
+                      <span className={`text-sm ${editingAssignment.type === "event" ? "text-foreground" : "text-muted-foreground"}`}>Event</span>
+                    </div>
+                  </div>
+                  {editingAssignment.type === "event" && (
+                    <p className="text-xs text-muted-foreground">Events only appear on the calendar and cannot be overdue.</p>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">{editingAssignment.type === "event" ? "Event" : "Task"} Name *</Label>
+                    <Input
+                      id="edit-name"
+                      value={editingAssignment.name}
+                      onChange={(e) => setEditingAssignment({ ...editingAssignment, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-course">Subject/Course</Label>
+                    <Input
+                      id="edit-course"
+                      value={editingAssignment.course_name}
+                      onChange={(e) => setEditingAssignment({ ...editingAssignment, course_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-due">Due Date</Label>
+                    <Input
+                      id="edit-due"
+                      type="datetime-local"
+                      value={editingAssignment.due_at}
+                      onChange={(e) => setEditingAssignment({ ...editingAssignment, due_at: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-priority">Priority</Label>
+                    <Select
+                      value={editingAssignment.priority}
+                      onValueChange={(value: "high" | "medium" | "low") => setEditingAssignment({ ...editingAssignment, priority: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-description">Notes</Label>
+                    <Textarea
+                      id="edit-description"
+                      value={editingAssignment.description}
+                      onChange={(e) => setEditingAssignment({ ...editingAssignment, description: e.target.value })}
+                    />
+                  </div>
+                  <Button onClick={handleUpdateAssignment} className="w-full" disabled={updateCustomAssignment.isPending}>
+                    {updateCustomAssignment.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
 
         {isLoading ? (
@@ -245,13 +363,25 @@ const Assignments = () => {
                               {assignment.course_name} ({assignment.course_code})
                             </p>
                           </div>
-                          <Badge
-                            className={`${getPriorityColor(
-                              assignment.priority
-                            )} text-white shrink-0`}
-                          >
-                            {assignment.priority}
-                          </Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge
+                              className={`${getPriorityColor(
+                                assignment.priority
+                              )} text-white`}
+                            >
+                              {assignment.priority}
+                            </Badge>
+                            {!assignment.html_url && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => handleEditAssignment(assignment)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-4 text-sm">
