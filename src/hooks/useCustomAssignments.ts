@@ -105,3 +105,21 @@ export const useDeleteCustomAssignment = () => {
     },
   });
 };
+
+export const useUpdateCustomAssignment = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string } & Partial<CreateCustomAssignmentInput>) => {
+      const { error } = await supabase
+        .from("custom_assignments")
+        .update(updates)
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["custom-assignments"] });
+    },
+  });
+};
