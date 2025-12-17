@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useCreateCustomAssignment } from "@/hooks/useCustomAssignments";
 import { toast } from "sonner";
 
@@ -39,6 +40,7 @@ const Assignments = () => {
     due_at: "",
     description: "",
     priority: "medium" as "high" | "medium" | "low",
+    type: "assignment" as "assignment" | "event",
   });
 
   const handleCreateTask = () => {
@@ -53,11 +55,12 @@ const Assignments = () => {
       description: newTask.description || null,
       links: null,
       priority: newTask.priority,
+      type: newTask.type,
     }, {
       onSuccess: () => {
-        toast.success("Task created successfully");
+        toast.success(newTask.type === "event" ? "Event created successfully" : "Task created successfully");
         setDialogOpen(false);
-        setNewTask({ name: "", course_name: "", due_at: "", description: "", priority: "medium" });
+        setNewTask({ name: "", course_name: "", due_at: "", description: "", priority: "medium", type: "assignment" });
       },
     });
   };
@@ -86,8 +89,10 @@ const Assignments = () => {
 
   const oneWeekAgo = subWeeks(new Date(), 1);
 
-  // Filter out assignments that are overdue by more than 1 week or hidden
+  // Filter out assignments that are overdue by more than 1 week, hidden, or are events
   const filteredAssignments = assignments.filter((a: any) => {
+    // Filter out events (they only show on calendar)
+    if (a.type === "event") return false;
     // Filter out hidden courses
     if (hiddenAssignmentIds.includes(a.course_id)) return false;
     if (!a.due_at) return true; // Keep assignments without due date
@@ -119,16 +124,31 @@ const Assignments = () => {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add New Task</DialogTitle>
+                <DialogTitle>Add New {newTask.type === "event" ? "Event" : "Task"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 mt-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="type-toggle">Type</Label>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm ${newTask.type === "assignment" ? "text-foreground" : "text-muted-foreground"}`}>Assignment</span>
+                    <Switch
+                      id="type-toggle"
+                      checked={newTask.type === "event"}
+                      onCheckedChange={(checked) => setNewTask({ ...newTask, type: checked ? "event" : "assignment" })}
+                    />
+                    <span className={`text-sm ${newTask.type === "event" ? "text-foreground" : "text-muted-foreground"}`}>Event</span>
+                  </div>
+                </div>
+                {newTask.type === "event" && (
+                  <p className="text-xs text-muted-foreground">Events only appear on the calendar and cannot be overdue.</p>
+                )}
                 <div className="space-y-2">
-                  <Label htmlFor="name">Task Name *</Label>
+                  <Label htmlFor="name">{newTask.type === "event" ? "Event" : "Task"} Name *</Label>
                   <Input
                     id="name"
                     value={newTask.name}
                     onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
-                    placeholder="Enter task name"
+                    placeholder={`Enter ${newTask.type === "event" ? "event" : "task"} name`}
                   />
                 </div>
                 <div className="space-y-2">
@@ -175,7 +195,7 @@ const Assignments = () => {
                   />
                 </div>
                 <Button onClick={handleCreateTask} className="w-full" disabled={createCustomAssignment.isPending}>
-                  {createCustomAssignment.isPending ? "Creating..." : "Create Task"}
+                  {createCustomAssignment.isPending ? "Creating..." : `Create ${newTask.type === "event" ? "Event" : "Task"}`}
                 </Button>
               </div>
             </DialogContent>

@@ -53,6 +53,7 @@ export type Database = {
           links: string | null
           name: string
           priority: string | null
+          type: string
           updated_at: string
           user_id: string
         }
@@ -67,6 +68,7 @@ export type Database = {
           links?: string | null
           name: string
           priority?: string | null
+          type?: string
           updated_at?: string
           user_id: string
         }
@@ -81,6 +83,7 @@ export type Database = {
           links?: string | null
           name?: string
           priority?: string | null
+          type?: string
           updated_at?: string
           user_id?: string
         }

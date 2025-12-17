@@ -9,6 +9,7 @@ export interface CustomAssignment {
   description: string | null;
   links: string | null;
   priority: "high" | "medium" | "low";
+  type: "assignment" | "event";
   completed: boolean;
   completed_at: string | null;
   created_at: string;
@@ -23,6 +24,7 @@ export interface CreateCustomAssignmentInput {
   description: string | null;
   links: string | null;
   priority: "high" | "medium" | "low";
+  type: "assignment" | "event";
 }
 
 export const useCustomAssignments = () => {
