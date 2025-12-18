@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { useAssignmentTypes } from "@/hooks/useAssignmentTypes";
+import { useCourseEventSettings } from "@/hooks/useCourseEventSettings";
 import { format, isPast, isFuture, subWeeks } from "date-fns";
 import { ExternalLink, Loader2, Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ const Assignments = () => {
   const toggleAssignment = useToggleAssignment();
   const { hiddenAssignmentIds } = useHiddenCourses();
   const { typeOverrides, setAssignmentType, getAssignmentType } = useAssignmentTypes();
+  const { isCourseTreatedAsEvent } = useCourseEventSettings();
   const createCustomAssignment = useCreateCustomAssignment();
   const updateCustomAssignment = useUpdateCustomAssignment();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -136,6 +138,8 @@ const Assignments = () => {
 
   // Filter out assignments that are overdue by more than 1 week, hidden, or are events
   const filteredAssignments = assignments.filter((a: any) => {
+    // Check if entire course is treated as events
+    if (a.course_id && isCourseTreatedAsEvent(a.course_id)) return false;
     // Get the effective type (use override if exists, otherwise use the assignment's type)
     const effectiveType = getAssignmentType(String(a.id)) || a.type || "assignment";
     // Filter out events (they only show on calendar)
