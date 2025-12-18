@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCanvasAssignments, useToggleAssignment } from "@/hooks/useCanvasAssignments";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
+import { useAssignmentTypes } from "@/hooks/useAssignmentTypes";
 import { format, isPast, isFuture, subWeeks } from "date-fns";
 import { ExternalLink, Loader2, Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useCreateCustomAssignment, useUpdateCustomAssignment } from "@/hooks/useCustomAssignments";
 import { toast } from "sonner";
 
@@ -32,6 +38,7 @@ const Assignments = () => {
   const { data, isLoading } = useCanvasAssignments();
   const toggleAssignment = useToggleAssignment();
   const { hiddenAssignmentIds } = useHiddenCourses();
+  const { typeOverrides, setAssignmentType, getAssignmentType } = useAssignmentTypes();
   const createCustomAssignment = useCreateCustomAssignment();
   const updateCustomAssignment = useUpdateCustomAssignment();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -129,8 +136,10 @@ const Assignments = () => {
 
   // Filter out assignments that are overdue by more than 1 week, hidden, or are events
   const filteredAssignments = assignments.filter((a: any) => {
+    // Get the effective type (use override if exists, otherwise use the assignment's type)
+    const effectiveType = getAssignmentType(String(a.id)) || a.type || "assignment";
     // Filter out events (they only show on calendar)
-    if (a.type === "event") return false;
+    if (effectiveType === "event") return false;
     // Filter out hidden courses
     if (hiddenAssignmentIds.includes(a.course_id)) return false;
     if (!a.due_at) return true; // Keep assignments without due date
@@ -371,7 +380,36 @@ const Assignments = () => {
                             >
                               {assignment.priority}
                             </Badge>
-                            {!assignment.html_url && (
+                            {assignment.html_url ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-56" align="end">
+                                  <div className="space-y-3">
+                                    <p className="text-sm font-medium">Change Type</p>
+                                    <div className="flex items-center justify-between">
+                                      <span className={`text-sm ${(getAssignmentType(String(assignment.id)) || "assignment") === "assignment" ? "text-foreground" : "text-muted-foreground"}`}>Assignment</span>
+                                      <Switch
+                                        checked={(getAssignmentType(String(assignment.id)) || "assignment") === "event"}
+                                        onCheckedChange={(checked) => {
+                                          setAssignmentType(String(assignment.id), checked ? "event" : "assignment");
+                                          toast.success(checked ? "Changed to event" : "Changed to assignment");
+                                        }}
+                                      />
+                                      <span className={`text-sm ${(getAssignmentType(String(assignment.id)) || "assignment") === "event" ? "text-foreground" : "text-muted-foreground"}`}>Event</span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Events only appear on the calendar.</p>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
                               <Button
                                 variant="ghost"
                                 size="sm"
