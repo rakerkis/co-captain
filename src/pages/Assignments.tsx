@@ -373,9 +373,9 @@ const Assignments = () => {
                             </Badge>
                             {!assignment.html_url && (
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="icon"
-                                className="h-7 w-7"
+                                className="h-8 w-8"
                                 onClick={() => handleEditAssignment(assignment)}
                               >
                                 <Pencil className="h-4 w-4" />
