@@ -47,12 +47,8 @@ export const useCanvasAssignments = () => {
         completed: completionMap.get(a.id.toString()) || false,
       }));
 
-      // Filter out completed assignments that are past their due date
-      const filteredAssignments = assignmentsWithStatus.filter((a: CanvasAssignment) => {
-        if (!a.completed) return true;
-        if (!a.due_at) return true;
-        return new Date(a.due_at) >= new Date();
-      });
+      // Filter out completed assignments (they don't need to be turned in)
+      const filteredAssignments = assignmentsWithStatus.filter((a: CanvasAssignment) => !a.completed);
 
       return { assignments: filteredAssignments };
     },
