@@ -373,12 +373,12 @@ const Assignments = () => {
                             </Badge>
                             {!assignment.html_url && (
                               <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
                                 onClick={() => handleEditAssignment(assignment)}
                               >
-                                <Pencil className="h-4 w-4" />
+                                <Pencil className="h-3.5 w-3.5" />
                               </Button>
                             )}
                           </div>
