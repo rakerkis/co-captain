@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { BookOpen, ExternalLink, Loader2, Settings } from "lucide-react";
 import { useCanvasCourses, CanvasCourse } from "@/hooks/useCanvasCourses";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
+import { useCourseEventSettings } from "@/hooks/useCourseEventSettings";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,6 +22,7 @@ const Courses = () => {
     isCourseHiddenFromCalendar, 
     isCourseHiddenFromAssignments 
   } = useHiddenCourses();
+  const { toggleCourseTreatAsEvent, isCourseTreatedAsEvent } = useCourseEventSettings();
 
   const handleColorChange = (courseId: number, colorClass: string) => {
     setCustomCourseColor(courseId, colorClass);
@@ -123,6 +125,19 @@ const Courses = () => {
                               onCheckedChange={() => toggleAssignmentsVisibility(course.id)}
                             />
                           </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor={`treat-as-event-${course.id}`} className="text-sm">
+                              Treat as events
+                            </Label>
+                            <Switch
+                              id={`treat-as-event-${course.id}`}
+                              checked={isCourseTreatedAsEvent(course.id)}
+                              onCheckedChange={() => toggleCourseTreatAsEvent(course.id)}
+                            />
+                          </div>
+                          {isCourseTreatedAsEvent(course.id) && (
+                            <p className="text-xs text-muted-foreground">Assignments from this course will only appear on the calendar.</p>
+                          )}
                         </div>
                       </PopoverContent>
                     </Popover>
