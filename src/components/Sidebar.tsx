@@ -42,7 +42,7 @@ const Sidebar = ({ session }: SidebarProps) => {
     <div className="h-screen w-48 bg-sidebar border-r border-border flex flex-col">
       {/* Header */}
       <div className="p-6 border-b border-border">
-        <h1 className="text-xl font-bold text-sidebar-foreground">co-captain</h1>
+        <h1 className="text-xl font-bold text-sidebar-foreground">Co-Captain</h1>
       </div>
 
       {/* Navigation */}
