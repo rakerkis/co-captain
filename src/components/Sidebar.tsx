@@ -1,4 +1,4 @@
-import { Calendar, ClipboardList, GraduationCap, BookOpen, User, Timer, LogOut, LogIn } from "lucide-react";
+import { Calendar, ClipboardList, GraduationCap, BookOpen, User, Timer, LogOut, LogIn, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +36,7 @@ const Sidebar = ({ session }: SidebarProps) => {
     { icon: GraduationCap, label: "GPA", path: "/gpa" },
     { icon: BookOpen, label: "Courses", path: "/courses" },
     { icon: Timer, label: "Focus", path: "/focus" },
+    { icon: Settings, label: "Settings", path: "/settings" },
   ];
 
   return (

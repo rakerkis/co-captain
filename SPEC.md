@@ -67,6 +67,39 @@
 
 ## 4. Page Specifications
 
+### 4.6 Settings/Option Page
+
+**Purpose:** Store Google account info, Canvas domain, and API token
+
+**Features:**
+- Canvas domain input (default: frs.instructure.com)
+- Canvas API token input (password field)
+- Google OAuth connect button
+- Auto-sync toggle
+- Sync interval setting (5-60 minutes)
+- Save settings to local storage
+
+**Components:**
+- `CanvasSettings` - Domain & token inputs
+- `GoogleConnect` - OAuth button
+- `SyncSettings` - Auto-sync controls
+
+**Data Structure:**
+```typescript
+interface AppSettings {
+  canvasDomain: string;
+  canvasToken: string;
+  googleConnected: boolean;
+  googleEmail?: string;
+  autoSync: boolean;
+  syncInterval: number; // minutes
+}
+```
+
+---
+
+## 4. Page Specifications
+
 ### 4.1 Home (Calendar)
 
 **Purpose:** Combined calendar view of Google + Canvas events
@@ -294,20 +327,22 @@ co-captain/
 ## 8. Milestones
 
 ### Phase 1: MVP (2-3 weeks)
-- [ ] Set up React + React Native project
-- [ ] Implement Calendar view (local events only first)
-- [ ] Build Assignments page
-- [ ] Build Courses page
-- [ ] Basic navigation
+- [x] Set up React project (existing Lovable prototype)
+- [x] Settings/Option page (token storage)
+- [x] Implement Calendar view (local events only first)
+- [x] Build Assignments page
+- [x] Build Courses page
+- [x] Basic navigation
 
 ### Phase 2: Integrations (2-3 weeks)
-- [ ] Google Calendar OAuth + API
 - [ ] Canvas API token integration
+- [ ] Google Calendar OAuth + API
 - [ ] Auto-sync events/assignments
 
 ### Phase 3: Polish (1-2 weeks)
 - [ ] GPA page
 - [ ] Focus timer
+- [ ] React Native mobile app
 - [ ] iOS build
 - [ ] Polish UI
 
