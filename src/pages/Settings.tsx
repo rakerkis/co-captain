@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
-import { Settings, Save, ExternalLink, Key, Globe, RefreshCw } from "lucide-react";
+import { Settings, Save, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { localStorage } from "@/integrations/storage";
+import { googleCalendar } from "@/integrations/googleCalendar";
 
 interface SettingsData {
   canvasDomain: string;
   canvasToken: string;
   googleConnected: boolean;
+  googleEmail?: string;
   autoSync: boolean;
   syncInterval: number;
 }
@@ -18,10 +20,12 @@ interface SettingsData {
 const SettingsPage = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [settings, setSettings] = useState<SettingsData>({
     canvasDomain: "frs.instructure.com",
     canvasToken: "",
     googleConnected: false,
+    googleEmail: "",
     autoSync: true,
     syncInterval: 15,
   });
@@ -36,6 +40,21 @@ const SettingsPage = () => {
       } catch (e) {
         console.error("Failed to parse settings:", e);
       }
+    }
+
+    // Check for Google OAuth callback
+    if (googleCalendar.handleCallback()) {
+      // Successfully authenticated
+      setSettings((prev) => ({ ...prev, googleConnected: true }));
+      toast({
+        title: "Google Connected",
+        description: "Your Google Calendar has been connected successfully!",
+      });
+    }
+
+    // Check if already connected
+    if (googleCalendar.isAuthenticated()) {
+      setSettings((prev) => ({ ...prev, googleConnected: true }));
     }
   }, []);
 
@@ -60,12 +79,61 @@ const SettingsPage = () => {
     }
   };
 
-  const handleConnectGoogle = () => {
-    // Google OAuth will be implemented here
-    toast({
-      title: "Coming Soon",
-      description: "Google Calendar integration will be available soon.",
-    });
+  const handleConnectGoogle = async () => {
+    if (settings.googleConnected) {
+      // Disconnect
+      googleCalendar.disconnect();
+      setSettings((prev) => ({ ...prev, googleConnected: false, googleEmail: "" }));
+      toast({
+        title: "Disconnected",
+        description: "Google Calendar has been disconnected.",
+      });
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      // Check if client ID is configured
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        toast({
+          title: "Setup Required",
+          description: "Google Client ID not configured. Please add VITE_GOOGLE_CLIENT_ID to your environment variables.",
+          variant: "destructive",
+        });
+        setGoogleLoading(false);
+        return;
+      }
+
+      // Redirect to Google OAuth
+      const authUrl = googleCalendar.getAuthUrl();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error("Google OAuth error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to connect to Google. Please try again.",
+        variant: "destructive",
+      });
+      setGoogleLoading(false);
+    }
+  };
+
+  const testGoogleConnection = async () => {
+    try {
+      await googleCalendar.getEvents();
+      toast({
+        title: "Connection Successful",
+        description: "Google Calendar API is working!",
+      });
+    } catch (error) {
+      console.error("Google API test failed:", error);
+      toast({
+        title: "Connection Failed",
+        description: "Failed to access Google Calendar. Please reconnect.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -137,16 +205,22 @@ const SettingsPage = () => {
               Connect your Google Calendar to sync events
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Button
               variant={settings.googleConnected ? "outline" : "default"}
               onClick={handleConnectGoogle}
+              disabled={googleLoading}
               className="w-full"
             >
-              {settings.googleConnected ? (
+              {googleLoading ? (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Reconnect Google Account
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : settings.googleConnected ? (
+                <>
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Disconnect Google Account
                 </>
               ) : (
                 <>
@@ -155,9 +229,29 @@ const SettingsPage = () => {
                 </>
               )}
             </Button>
+            
             {settings.googleConnected && (
-              <p className="text-sm text-green-600 mt-2 text-center">
-                ✓ Connected
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Connected to Google Calendar</span>
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={testGoogleConnection}
+                  className="w-full"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Test Connection
+                </Button>
+              </div>
+            )}
+
+            {!settings.googleConnected && (
+              <p className="text-xs text-muted-foreground text-center">
+                Clicking connect will redirect you to Google to authorize access
               </p>
             )}
           </CardContent>
