@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { localStorage } from "@/integrations/storage";
+import { supabase } from "@/integrations/supabase/client";
 import { googleCalendar } from "@/integrations/googleCalendar";
 
 interface SettingsData {
@@ -21,6 +22,7 @@ const SettingsPage = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsData>({
     canvasDomain: "frs.instructure.com",
     canvasToken: "",
@@ -29,6 +31,8 @@ const SettingsPage = () => {
     autoSync: true,
     syncInterval: 15,
   });
+
+  const [googleStatus, setGoogleStatus] = useState<string | null>(null);
 
   useEffect(() => {
     // Load settings from local storage
@@ -42,20 +46,84 @@ const SettingsPage = () => {
       }
     }
 
-    // Check for Google OAuth callback
-    if (googleCalendar.handleCallback()) {
-      // Successfully authenticated
-      setSettings((prev) => ({ ...prev, googleConnected: true }));
-      toast({
-        title: "Google Connected",
-        description: "Your Google Calendar has been connected successfully!",
-      });
+    // Check URL hash for OAuth error FIRST
+    let hashError: string | null = null;
+    const hash = window.location.hash;
+    if (hash.includes("error")) {
+      const params = new URLSearchParams(hash.substring(1));
+      hashError = params.get("error_description") || params.get("error") || "OAuth failed";
+      console.error("[Settings] OAuth error in URL hash:", hashError);
+      setGoogleError(hashError);
+      // Clean up the URL hash
+      window.history.replaceState(null, "", window.location.pathname);
     }
 
-    // Check if already connected
-    if (googleCalendar.isAuthenticated()) {
-      setSettings((prev) => ({ ...prev, googleConnected: true }));
-    }
+    const markConnected = (email: string, showToast = false) => {
+      window.localStorage.setItem("google-connected-email", email);
+      setSettings((prev) => ({
+        ...prev,
+        googleConnected: true,
+        googleEmail: email,
+      }));
+      setGoogleError(null);
+      setGoogleStatus("Connected successfully!");
+      if (showToast) {
+        toast({
+          title: "Google Connected",
+          description: `Connected as ${email}`,
+        });
+      }
+    };
+
+    // Listen for auth state changes (catches the OAuth redirect)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("[Settings] Auth state change:", _event, {
+        hasProviderToken: !!session?.provider_token,
+        provider: session?.user?.app_metadata?.provider,
+        email: session?.user?.email,
+      });
+
+      if (session?.provider_token) {
+        markConnected(session.user?.email || "", true);
+      } else if (session?.user?.app_metadata?.provider === 'google' ||
+                 session?.user?.identities?.some(i => i.provider === 'google')) {
+        const savedEmail = window.localStorage.getItem("google-connected-email") || session.user?.email || "";
+        setSettings((prev) => ({
+          ...prev,
+          googleConnected: true,
+          googleEmail: savedEmail,
+        }));
+      }
+    });
+
+    // Also check current session (don't overwrite hash error)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("[Settings] Session check:", {
+        hasSession: !!session,
+        hasProviderToken: !!session?.provider_token,
+        provider: session?.user?.app_metadata?.provider,
+        identities: session?.user?.identities?.map(i => i.provider),
+        email: session?.user?.email,
+      });
+
+      if (session?.provider_token) {
+        markConnected(session.user?.email || "", false);
+      } else if (session?.user?.app_metadata?.provider === 'google' ||
+                 session?.user?.identities?.some(i => i.provider === 'google')) {
+        const savedEmail = window.localStorage.getItem("google-connected-email") || session.user?.email || "";
+        setSettings((prev) => ({
+          ...prev,
+          googleConnected: true,
+          googleEmail: savedEmail,
+        }));
+        if (!hashError) {
+          setGoogleError("Google Calendar token expired. Please reconnect to sync events.");
+        }
+      }
+      // Don't clear googleError here — preserve hash errors
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleSave = async () => {
@@ -81,9 +149,12 @@ const SettingsPage = () => {
 
   const handleConnectGoogle = async () => {
     if (settings.googleConnected) {
-      // Disconnect
+      // Disconnect — clear local state
       googleCalendar.disconnect();
+      window.localStorage.removeItem("google-connected-email");
       setSettings((prev) => ({ ...prev, googleConnected: false, googleEmail: "" }));
+      setGoogleError(null);
+      setGoogleStatus(null);
       toast({
         title: "Disconnected",
         description: "Google Calendar has been disconnected.",
@@ -92,24 +163,13 @@ const SettingsPage = () => {
     }
 
     setGoogleLoading(true);
+    setGoogleError(null);
     try {
-      // Check if client ID is configured
-      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      if (!clientId) {
-        toast({
-          title: "Setup Required",
-          description: "Google Client ID not configured. Please add VITE_GOOGLE_CLIENT_ID to your environment variables.",
-          variant: "destructive",
-        });
-        setGoogleLoading(false);
-        return;
-      }
-
-      // Redirect to Google OAuth
-      const authUrl = googleCalendar.getAuthUrl();
-      window.location.href = authUrl;
-    } catch (error) {
+      // Use Supabase Google OAuth with calendar scope
+      await googleCalendar.connect();
+    } catch (error: any) {
       console.error("Google OAuth error:", error);
+      setGoogleError(error.message || "Failed to connect to Google. Please try again.");
       toast({
         title: "Error",
         description: "Failed to connect to Google. Please try again.",
@@ -120,17 +180,19 @@ const SettingsPage = () => {
   };
 
   const testGoogleConnection = async () => {
+    setGoogleError(null);
     try {
       await googleCalendar.getEvents();
       toast({
         title: "Connection Successful",
         description: "Google Calendar API is working!",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Google API test failed:", error);
+      setGoogleError(error.message || "Failed to access Google Calendar. Please reconnect.");
       toast({
         title: "Connection Failed",
-        description: "Failed to access Google Calendar. Please reconnect.",
+        description: error.message || "Failed to access Google Calendar. Please reconnect.",
         variant: "destructive",
       });
     }
@@ -206,37 +268,25 @@ const SettingsPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              variant={settings.googleConnected ? "outline" : "default"}
-              onClick={handleConnectGoogle}
-              disabled={googleLoading}
-              className="w-full"
-            >
-              {googleLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Connecting...
-                </>
-              ) : settings.googleConnected ? (
-                <>
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Disconnect Google Account
-                </>
-              ) : (
-                <>
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Connect Google Account
-                </>
-              )}
-            </Button>
-            
-            {settings.googleConnected && (
-              <div className="space-y-2">
+            {settings.googleConnected ? (
+              <>
                 <div className="flex items-center gap-2 text-green-600">
                   <CheckCircle className="w-4 h-4" />
                   <span className="text-sm font-medium">Connected to Google Calendar</span>
                 </div>
-                
+                {settings.googleEmail && (
+                  <p className="text-sm text-muted-foreground">
+                    Signed in as <span className="font-medium text-foreground">{settings.googleEmail}</span>
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleConnectGoogle}
+                  className="w-full"
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Disconnect Google Account
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -246,13 +296,36 @@ const SettingsPage = () => {
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Test Connection
                 </Button>
-              </div>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={handleConnectGoogle}
+                  disabled={googleLoading}
+                  className="w-full"
+                >
+                  {googleLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Connect Google Account
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Clicking connect will redirect you to Google to authorize access
+                </p>
+              </>
             )}
-
-            {!settings.googleConnected && (
-              <p className="text-xs text-muted-foreground text-center">
-                Clicking connect will redirect you to Google to authorize access
-              </p>
+            {googleError && (
+              <p className="text-sm text-red-500 font-medium">{googleError}</p>
+            )}
+            {googleStatus && !googleError && (
+              <p className="text-sm text-green-500 font-medium">{googleStatus}</p>
             )}
           </CardContent>
         </Card>

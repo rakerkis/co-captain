@@ -56,6 +56,7 @@ export const AuthForm = () => {
         provider: 'google',
         options: {
           redirectTo: window.location.origin,
+          scopes: 'https://www.googleapis.com/auth/calendar.readonly',
         },
       });
       if (error) throw error;

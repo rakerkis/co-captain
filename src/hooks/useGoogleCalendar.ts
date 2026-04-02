@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { googleCalendar } from "@/integrations/googleCalendar";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 
@@ -23,26 +24,7 @@ export const useGoogleCalendarAuth = () => {
 
   return useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const state = JSON.stringify({ userId: user.id });
-      
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { state },
-      });
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data) => {
-      if (data?.authUrl) {
-        window.open(data.authUrl, '_blank');
-        toast({
-          title: "Authorization Started",
-          description: "Complete the authorization in the popup window",
-        });
-      }
+      await googleCalendar.connect();
     },
     onError: (error) => {
       toast({
@@ -55,42 +37,37 @@ export const useGoogleCalendarAuth = () => {
 };
 
 export const useGoogleCalendarEvents = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasProviderToken, setHasProviderToken] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
+      setHasProviderToken(!!session?.provider_token);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
+      setHasProviderToken(!!session?.provider_token);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   return useQuery({
-    queryKey: ["google-calendar-events"],
+    queryKey: ["google-calendar-events", hasProviderToken],
     queryFn: async () => {
-      // Return empty state if not authenticated
-      if (!isAuthenticated) {
+      if (!hasProviderToken) {
         return { events: [], isConnected: false };
       }
 
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth/events');
-
-      if (error) {
-        if (error.message?.includes('Not authenticated')) {
-          return { events: [], isConnected: false };
-        }
-        throw error;
+      try {
+        const events = await googleCalendar.getEvents();
+        return { events: events as GoogleCalendarEvent[], isConnected: true };
+      } catch {
+        return { events: [], isConnected: false };
       }
-
-      return { events: data.events as GoogleCalendarEvent[], isConnected: true };
     },
-    enabled: isAuthenticated, // Only run query when authenticated
+    enabled: hasProviderToken,
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -102,11 +79,8 @@ export const useGoogleCalendarDisconnect = () => {
 
   return useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.functions.invoke('google-calendar-auth/disconnect', {
-        method: 'POST',
-      });
-
-      if (error) throw error;
+      // Sign out and sign back in without Google to remove provider token
+      googleCalendar.disconnect();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] });
