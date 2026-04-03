@@ -5,16 +5,10 @@ import { useCustomAssignments, useToggleCustomAssignment, type CustomAssignment 
 import { useGoogleCalendarEvents, useGoogleCalendarAuth, useGoogleCalendarDisconnect, type GoogleCalendarEvent } from "@/hooks/useGoogleCalendar";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { Badge } from "@/components/ui/badge";
-import { format, startOfDay, isPast } from "date-fns";
-import { Calendar as CalendarIcon, ExternalLink, Trash2 } from "lucide-react";
+import { format, startOfDay, isPast, startOfWeek, endOfWeek, addDays, isSameDay, startOfMonth, endOfMonth, getDay, addMonths, subMonths, addWeeks, subWeeks } from "date-fns";
+import { Calendar as CalendarIcon, ExternalLink, Trash2, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,6 +29,8 @@ type CombinedAssignment = {
   description?: string;
 };
 
+type ViewMode = "day" | "week" | "month" | "schedule";
+
 const Index = () => {
   const [session, setSession] = useState<any>(null);
   const { data, isLoading } = useCanvasAssignments();
@@ -45,8 +41,9 @@ const Index = () => {
   const googleCalendarAuth = useGoogleCalendarAuth();
   const googleCalendarDisconnect = useGoogleCalendarDisconnect();
   const { hiddenCalendarIds } = useHiddenCourses();
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [selectedEvent, setSelectedEvent] = useState<CombinedAssignment | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -103,20 +100,13 @@ const Index = () => {
     return [...canvas, ...custom, ...google];
   }, [canvasAssignments, customAssignmentsList, googleEvents, hiddenCalendarIds]);
 
-  // Get assignments for selected date
-  const selectedAssignments = selectedDate
-    ? allAssignments.filter((a) => {
-        if (!a.due_at) return false;
-        const dueDate = startOfDay(new Date(a.due_at));
-        const selected = startOfDay(selectedDate);
-        return dueDate.getTime() === selected.getTime();
-      })
-    : [];
-
-  // Get dates with assignments
-  const datesWithAssignments = allAssignments
-    .filter((a) => a.due_at)
-    .map((a) => startOfDay(new Date(a.due_at!)));
+  // Get assignments for a specific date
+  const getAssignmentsForDate = (date: Date) => {
+    return allAssignments.filter((a) => {
+      if (!a.due_at) return false;
+      return isSameDay(new Date(a.due_at), date);
+    });
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -132,10 +122,7 @@ const Index = () => {
   };
 
   const handleToggleAssignment = (assignment: CombinedAssignment) => {
-    if (assignment.isGoogleEvent) {
-      // Google Calendar events can't be marked as complete
-      return;
-    }
+    if (assignment.isGoogleEvent) return;
     if (assignment.isCustom) {
       toggleCustomAssignment.mutate({
         id: assignment.id as string,
@@ -149,226 +136,428 @@ const Index = () => {
     }
   };
 
-  const handleDateClick = (date: Date) => {
-    setSelectedDate(date);
-    const dayAssignments = allAssignments.filter((a) => {
-      if (!a.due_at) return false;
-      const dueDate = startOfDay(new Date(a.due_at));
-      const currentDate = startOfDay(date);
-      return dueDate.getTime() === currentDate.getTime();
-    });
-    if (dayAssignments.length > 0) {
-      setDialogOpen(true);
-    }
+  const navigatePrev = () => {
+    if (viewMode === "month") setSelectedDate(subMonths(selectedDate, 1));
+    else if (viewMode === "week") setSelectedDate(subWeeks(selectedDate, 1));
+    else setSelectedDate(addDays(selectedDate, -1));
   };
 
+  const navigateNext = () => {
+    if (viewMode === "month") setSelectedDate(addMonths(selectedDate, 1));
+    else if (viewMode === "week") setSelectedDate(addWeeks(selectedDate, 1));
+    else setSelectedDate(addDays(selectedDate, 1));
+  };
+
+  const goToToday = () => setSelectedDate(new Date());
+
+  // Generate month grid
+  const monthDays = useMemo(() => {
+    const start = startOfMonth(selectedDate);
+    const end = endOfMonth(selectedDate);
+    const startWeekDay = getDay(start);
+    const days: Date[] = [];
+    // Fill leading days from previous month
+    for (let i = startWeekDay; i > 0; i--) {
+      days.push(addDays(start, -i));
+    }
+    // Fill current month
+    let current = start;
+    while (current <= end) {
+      days.push(current);
+      current = addDays(current, 1);
+    }
+    // Fill trailing days to complete the grid (6 rows)
+    let trailing = 1;
+    while (days.length < 42) {
+      days.push(addDays(end, trailing));
+      trailing++;
+    }
+    return days;
+  }, [selectedDate]);
+
+  // Generate week days
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(selectedDate, { weekStartsOn: 0 });
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  }, [selectedDate]);
+
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  // Render event detail view
+  const renderEventDetail = () => {
+    if (!selectedEvent) return null;
+    const dueDate = selectedEvent.due_at ? new Date(selectedEvent.due_at) : null;
+    const isOverdue = dueDate && isPast(dueDate);
+
+    return (
+      <div className="p-6">
+        <div className="max-w-2xl mx-auto">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedEvent(null)}>
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  Back
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className={`w-4 h-4 rounded-full mt-1 shrink-0 ${getCourseColor(selectedEvent.course_id || 'default')}`} />
+                <div className="flex-1">
+                  <h2 className={`text-2xl font-bold ${selectedEvent.completed ? 'line-through text-muted-foreground' : ''}`}>
+                    {selectedEvent.name}
+                  </h2>
+                  <p className="text-muted-foreground mt-1">{selectedEvent.course_name}</p>
+                </div>
+                <Badge className={`${getPriorityColor(selectedEvent.priority)} text-white`}>
+                  {selectedEvent.priority}
+                </Badge>
+              </div>
+
+              {dueDate && (
+                <div className={`text-sm ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                  Due: {format(dueDate, "EEEE, MMMM d, yyyy 'at' h:mm a")}
+                  {isOverdue && " (Overdue)"}
+                </div>
+              )}
+
+              {selectedEvent.description && (
+                <div className="border-t pt-4">
+                  <h3 className="font-medium mb-2">Description</h3>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedEvent.description}</p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-4 border-t pt-4">
+                {!selectedEvent.isGoogleEvent && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedEvent.completed || false}
+                      onCheckedChange={() => handleToggleAssignment(selectedEvent)}
+                    />
+                    <span className="text-sm">{selectedEvent.completed ? "Completed" : "Mark as complete"}</span>
+                  </div>
+                )}
+                {selectedEvent.html_url && (
+                  <a
+                    href={selectedEvent.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-primary hover:underline text-sm"
+                  >
+                    {selectedEvent.isGoogleEvent ? "Open in Google Calendar" : "View in Canvas"}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
+  // Render an event pill
+  const renderEventPill = (assignment: CombinedAssignment, compact = false) => (
+    <button
+      key={assignment.id}
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedEvent(assignment);
+      }}
+      className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap max-w-full text-left w-full hover:opacity-80 transition-opacity`}
+    >
+      {compact && assignment.due_at ? `${format(new Date(assignment.due_at), "h:mm a")} ` : ""}
+      {assignment.name}
+    </button>
+  );
+
+  // Month view cell
+  const renderMonthCell = (date: Date) => {
+    const dayAssignments = getAssignmentsForDate(date);
+    const isCurrentMonth = date.getMonth() === selectedDate.getMonth();
+    const isToday = isSameDay(date, new Date());
+
+    return (
+      <div
+        key={date.toISOString()}
+        className={`border border-border p-1 min-h-[90px] cursor-pointer hover:bg-accent/50 transition-colors ${
+          !isCurrentMonth ? "opacity-40" : ""
+        } ${isToday ? "bg-accent" : ""}`}
+        onClick={() => {
+          setSelectedDate(date);
+          if (dayAssignments.length > 0) {
+            setViewMode("day");
+          }
+        }}
+      >
+        <span className={`text-sm font-medium ${isToday ? "text-primary font-bold" : ""}`}>
+          {format(date, "d")}
+        </span>
+        <div className="flex flex-col gap-0.5 mt-0.5">
+          {dayAssignments.slice(0, 2).map((a) => renderEventPill(a))}
+          {dayAssignments.length > 2 && (
+            <span className="text-[10px] text-muted-foreground">+{dayAssignments.length - 2} more</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Week view
+  const renderWeekView = () => (
+    <div className="flex flex-col h-full overflow-auto">
+      {/* Header row */}
+      <div className="grid grid-cols-8 border-b sticky top-0 bg-background z-10">
+        <div className="p-2 text-xs text-muted-foreground border-r" />
+        {weekDays.map((day) => (
+          <div
+            key={day.toISOString()}
+            className={`p-2 text-center border-r ${isSameDay(day, new Date()) ? "bg-accent" : ""}`}
+          >
+            <div className="text-xs text-muted-foreground">{format(day, "EEE")}</div>
+            <div className={`text-lg font-semibold ${isSameDay(day, new Date()) ? "text-primary" : ""}`}>
+              {format(day, "d")}
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* All-day events */}
+      <div className="grid grid-cols-8 border-b">
+        <div className="p-1 text-[10px] text-muted-foreground border-r">All day</div>
+        {weekDays.map((day) => {
+          const dayEvents = getAssignmentsForDate(day).filter(
+            (a) => a.due_at && !new Date(a.due_at).getHours()
+          );
+          return (
+            <div key={day.toISOString()} className="p-1 border-r min-h-[30px]">
+              {dayEvents.map((a) => renderEventPill(a))}
+            </div>
+          );
+        })}
+      </div>
+      {/* Time grid */}
+      {hours.map((hour) => (
+        <div key={hour} className="grid grid-cols-8 border-b min-h-[50px]">
+          <div className="p-1 text-[10px] text-muted-foreground border-r text-right pr-2">
+            {format(new Date(2000, 0, 1, hour), "h a")}
+          </div>
+          {weekDays.map((day) => {
+            const dayEvents = getAssignmentsForDate(day).filter((a) => {
+              if (!a.due_at) return false;
+              const d = new Date(a.due_at);
+              return d.getHours() === hour;
+            });
+            return (
+              <div key={day.toISOString()} className="p-0.5 border-r">
+                {dayEvents.map((a) => renderEventPill(a, true))}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+
+  // Day view
+  const renderDayView = () => {
+    const dayAssignments = getAssignmentsForDate(selectedDate);
+    return (
+      <div className="flex flex-col h-full overflow-auto">
+        {/* All-day events */}
+        {dayAssignments.filter((a) => a.due_at && !new Date(a.due_at!).getHours()).length > 0 && (
+          <div className="border-b p-2">
+            <div className="text-xs text-muted-foreground mb-1">All day</div>
+            <div className="flex flex-col gap-1">
+              {dayAssignments
+                .filter((a) => a.due_at && !new Date(a.due_at!).getHours())
+                .map((a) => renderEventPill(a))}
+            </div>
+          </div>
+        )}
+        {/* Time grid */}
+        {hours.map((hour) => {
+          const hourEvents = dayAssignments.filter((a) => {
+            if (!a.due_at) return false;
+            return new Date(a.due_at).getHours() === hour;
+          });
+          return (
+            <div key={hour} className="flex border-b min-h-[50px]">
+              <div className="w-20 p-2 text-xs text-muted-foreground text-right pr-3 border-r shrink-0">
+                {format(new Date(2000, 0, 1, hour), "h a")}
+              </div>
+              <div className="flex-1 p-1">
+                {hourEvents.map((a) => renderEventPill(a, true))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Schedule view
+  const renderScheduleView = () => {
+    const upcomingAssignments = allAssignments
+      .filter((a) => a.due_at)
+      .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime());
+
+    // Group by date
+    const grouped: Record<string, CombinedAssignment[]> = {};
+    for (const a of upcomingAssignments) {
+      const key = format(new Date(a.due_at!), "yyyy-MM-dd");
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(a);
+    }
+
+    const sortedDates = Object.keys(grouped).sort();
+
+    if (sortedDates.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          No upcoming events
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-full overflow-auto">
+        {sortedDates.map((dateKey) => {
+          const date = new Date(dateKey + "T00:00:00");
+          const events = grouped[dateKey];
+          const isToday = isSameDay(date, new Date());
+          return (
+            <div key={dateKey} className="border-b last:border-b-0">
+              <div className={`flex items-baseline gap-3 px-4 py-3 ${isToday ? "bg-accent/50" : ""}`}>
+                <span className={`text-2xl font-bold ${isToday ? "text-primary" : ""}`}>
+                  {format(date, "d")}
+                </span>
+                <span className="text-sm text-muted-foreground uppercase">
+                  {format(date, "EEE, MMM")}
+                </span>
+              </div>
+              <div className="divide-y">
+                {events.map((event) => {
+                  const eventDate = event.due_at ? new Date(event.due_at) : null;
+                  const hasTime = eventDate && eventDate.getHours() !== 0;
+                  return (
+                    <button
+                      key={event.id}
+                      onClick={() => setSelectedEvent(event)}
+                      className="w-full flex items-center gap-3 px-4 py-2 hover:bg-accent/30 transition-colors text-left"
+                    >
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${getCourseColor(event.course_id || 'default')}`} />
+                      <div className="w-24 shrink-0 text-sm text-muted-foreground">
+                        {hasTime ? format(eventDate!, "h:mm – ") : ""}
+                        {hasTime && eventDate ? format(new Date(eventDate.getTime() + 3600000), "h:mma") : "All day"}
+                      </div>
+                      <span className={`text-sm font-medium flex-1 ${event.completed ? 'line-through text-muted-foreground' : ''}`}>
+                        {event.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Header label
+  const headerLabel = useMemo(() => {
+    if (viewMode === "month") return format(selectedDate, "MMMM yyyy");
+    if (viewMode === "week") {
+      const start = startOfWeek(selectedDate, { weekStartsOn: 0 });
+      const end = endOfWeek(selectedDate, { weekStartsOn: 0 });
+      return `${format(start, "MMM d")} \u2013 ${format(end, "MMM d, yyyy")}`;
+    }
+    if (viewMode === "schedule") return "Schedule";
+    return format(selectedDate, "EEEE, MMMM d, yyyy");
+  }, [selectedDate, viewMode]);
+
+  if (selectedEvent) {
+    return renderEventDetail();
+  }
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-6 h-[calc(100vh-3rem)]">
-        {/* Calendar */}
-        <Card className="flex flex-col h-full">
-          <CardHeader>
+    <div className="p-6 h-[calc(100vh-2rem)]">
+      <Card className="flex flex-col h-full">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5" />
-                Assignment Calendar
+                Calendar
               </CardTitle>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                {/* View mode toggle */}
+                <div className="flex rounded-md border">
+                  {(["schedule", "day", "week", "month"] as ViewMode[]).map((mode) => (
+                    <Button
+                      key={mode}
+                      variant={viewMode === mode ? "default" : "ghost"}
+                      size="sm"
+                      className="text-xs capitalize rounded-none first:rounded-l-md last:rounded-r-md"
+                      onClick={() => setViewMode(mode)}
+                    >
+                      {mode}
+                    </Button>
+                  ))}
+                </div>
                 {session ? (
                   isGoogleConnected ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => googleCalendarDisconnect.mutate()}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => googleCalendarDisconnect.mutate()}>
                       Disconnect Google
                     </Button>
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => googleCalendarAuth.mutate()}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => googleCalendarAuth.mutate()}>
                       Connect Google Calendar
                     </Button>
                   )
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    asChild
-                  >
+                  <Button variant="outline" size="sm" asChild>
                     <a href="/auth">Login to Connect Calendar</a>
                   </Button>
                 )}
               </div>
             </div>
+            {/* Navigation */}
+            <div className="flex items-center gap-3 mt-2">
+              <Button variant="outline" size="sm" onClick={goToToday}>Today</Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={navigatePrev}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={navigateNext}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <span className="text-lg font-semibold">{headerLabel}</span>
+            </div>
           </CardHeader>
-          <CardContent className="flex-1 flex items-center justify-center overflow-hidden p-6">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              className="w-full h-full pointer-events-auto flex flex-col"
-              classNames={{
-                months: "flex flex-col h-full w-full",
-                month: "flex flex-col h-full w-full space-y-4",
-                caption: "flex justify-center pt-1 relative items-center mb-4",
-                caption_label: "text-lg font-semibold",
-                nav: "space-x-1 flex items-center",
-                nav_button: "h-9 w-9 bg-transparent hover:bg-accent rounded-lg",
-                nav_button_previous: "absolute left-1",
-                nav_button_next: "absolute right-1",
-                table: "w-full border-collapse flex-1",
-                head_row: "flex w-full mb-2",
-                head_cell: "text-muted-foreground rounded-md w-full font-medium text-sm flex-1 text-center",
-                row: "flex w-full mt-2 flex-1",
-                cell: "relative p-0 text-center flex-1 focus-within:relative focus-within:z-20 min-w-0 overflow-hidden",
-                day: "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-2xl border border-border hover:bg-accent transition-colors",
-                day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                day_today: "bg-accent text-accent-foreground",
-                day_outside: "text-muted-foreground opacity-50",
-                day_disabled: "text-muted-foreground opacity-50",
-                day_hidden: "invisible",
-              }}
-              components={{
-                Day: ({ date, ...props }) => {
-                  const dayAssignments = allAssignments.filter((a) => {
-                    if (!a.due_at) return false;
-                    const dueDate = startOfDay(new Date(a.due_at));
-                    const currentDate = startOfDay(date);
-                    return dueDate.getTime() === currentDate.getTime();
-                  });
-                  
-                  const isSelected = selectedDate && startOfDay(date).getTime() === startOfDay(selectedDate).getTime();
-                  
-                  // Get unique course colors for this day (max 4)
-                  const uniqueCourseIds = [...new Set(dayAssignments.map(a => a.course_id))].slice(0, 4);
-                  
-                  return (
-                    <button
-                      {...props}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleDateClick(date);
-                      }}
-                      className={`w-full h-[90px] flex flex-col items-start justify-start p-2 rounded-2xl border transition-colors overflow-hidden max-w-full ${
-                        isSelected 
-                          ? "bg-primary text-primary-foreground border-primary" 
-                          : "border-border hover:bg-accent"
-                      }`}
-                    >
-                      <span className="text-sm font-medium mb-0.5">{format(date, "d")}</span>
-                      {dayAssignments.length > 0 && (
-                        <div className="flex flex-col gap-0.5 overflow-hidden flex-1 min-h-0 w-full min-w-0 max-w-full">
-                          {dayAssignments.slice(0, 2).map((assignment) => (
-                            <div
-                              key={assignment.id}
-                              className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap max-w-full`}
-                            >
-                              {assignment.name}
-                            </div>
-                          ))}
-                          {dayAssignments.length > 2 && (
-                            <span className={`text-[10px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                              +{dayAssignments.length - 2} more
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </button>
-                  );
-                },
-              }}
-            />
+          <CardContent className="flex-1 overflow-hidden p-4">
+            {viewMode === "month" && (
+              <div className="h-full flex flex-col">
+                {/* Weekday headers */}
+                <div className="grid grid-cols-7 mb-1">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                    <div key={d} className="text-center text-sm font-medium text-muted-foreground py-1">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                {/* Month grid */}
+                <div className="grid grid-cols-7 flex-1 auto-rows-fr">
+                  {monthDays.map((date) => renderMonthCell(date))}
+                </div>
+              </div>
+            )}
+            {viewMode === "week" && renderWeekView()}
+            {viewMode === "day" && renderDayView()}
+            {viewMode === "schedule" && renderScheduleView()}
           </CardContent>
         </Card>
-
-        {/* Assignment Details Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                Assignments for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
-              {selectedAssignments.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No assignments for this date</p>
-              ) : (
-                selectedAssignments.map((assignment) => {
-                  const dueDate = assignment.due_at ? new Date(assignment.due_at) : null;
-                  const isOverdue = dueDate && isPast(dueDate);
-                  
-                  return (
-                    <Card key={assignment.id} className={isOverdue ? "border-destructive/50" : ""}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-3">
-                          {!assignment.isGoogleEvent && (
-                            <Checkbox
-                              checked={assignment.completed || false}
-                              onCheckedChange={() => handleToggleAssignment(assignment)}
-                              className="mt-1"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start gap-3 mb-2">
-                              <div
-                                className={`w-3 h-3 rounded-full mt-1.5 shrink-0 ${getCourseColor(assignment.course_id || 'default')}`}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <h3 className={`font-semibold text-lg ${assignment.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                                  {assignment.name}
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                  {assignment.course_name}
-                                  {!assignment.isCustom && 'course_code' in assignment && assignment.course_code && ` (${assignment.course_code})`}
-                                </p>
-                              </div>
-                              <Badge
-                                className={`${getPriorityColor(assignment.priority)} text-white shrink-0`}
-                              >
-                                {assignment.priority}
-                              </Badge>
-                            </div>
-
-                            <div className="flex items-center gap-4 text-sm">
-                              {dueDate && (
-                                <div
-                                  className={`${
-                                    isOverdue
-                                      ? "text-destructive font-medium"
-                                      : "text-muted-foreground"
-                                  }`}
-                                >
-                                  Due: {format(dueDate, "MMM d, yyyy 'at' h:mm a")}
-                                  {isOverdue && " (Overdue)"}
-                                </div>
-                              )}
-                              {!assignment.isCustom && 'html_url' in assignment && assignment.html_url && (
-                                <a
-                                  href={assignment.html_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-1 text-primary hover:underline"
-                                >
-                                  View in Canvas
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
-    </div>
   );
 };
 
