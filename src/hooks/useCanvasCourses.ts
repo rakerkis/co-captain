@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchCanvasData } from "@/integrations/canvasApi";
 
 export interface CanvasCourse {
   id: number;
@@ -14,12 +14,10 @@ export const useCanvasCourses = () => {
   return useQuery({
     queryKey: ["canvas-courses"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("fetch-canvas-assignments");
-      
-      if (error) throw error;
-      
-      return data?.courses || [];
+      const { courses } = await fetchCanvasData();
+      return courses;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 };

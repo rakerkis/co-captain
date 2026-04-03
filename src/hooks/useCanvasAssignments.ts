@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { subWeeks } from "date-fns";
+import { fetchCanvasData } from "@/integrations/canvasApi";
 
 export interface CanvasAssignment {
   id: number;
@@ -8,6 +9,7 @@ export interface CanvasAssignment {
   due_at: string | null;
   course_name: string;
   course_code: string;
+  course_id?: number;
   priority: "high" | "medium" | "low";
   html_url: string;
   completed?: boolean;
@@ -17,22 +19,17 @@ export const useCanvasAssignments = () => {
   return useQuery({
     queryKey: ["canvas-assignments"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("fetch-canvas-assignments");
-      
-      if (error) throw error;
-      
-      const assignments = data?.assignments || [];
+      const { assignments } = await fetchCanvasData();
       
       // Filter out assignments older than 1 week past due date
       const oneWeekAgo = subWeeks(new Date(), 1);
-      const recentAssignments = assignments.filter((a: CanvasAssignment) => {
+      const recentAssignments = assignments.filter((a) => {
         if (!a.due_at) return true;
         const dueDate = new Date(a.due_at);
-        const isMoreThanWeekOld = dueDate < oneWeekAgo;
-        return !isMoreThanWeekOld;
+        return dueDate >= oneWeekAgo;
       });
 
-      // Fetch completion status
+      // Fetch completion status from Supabase
       const { data: completions } = await supabase
         .from("assignment_completions")
         .select("assignment_id, completed");
@@ -42,17 +39,18 @@ export const useCanvasAssignments = () => {
       );
 
       // Merge completion status with assignments
-      const assignmentsWithStatus = recentAssignments.map((a: CanvasAssignment) => ({
+      const assignmentsWithStatus = recentAssignments.map((a) => ({
         ...a,
         completed: completionMap.get(a.id.toString()) || false,
       }));
 
-      // Filter out completed assignments (they don't need to be turned in)
-      const filteredAssignments = assignmentsWithStatus.filter((a: CanvasAssignment) => !a.completed);
+      // Filter out completed assignments
+      const filteredAssignments = assignmentsWithStatus.filter((a) => !a.completed);
 
       return { assignments: filteredAssignments };
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 };
 
