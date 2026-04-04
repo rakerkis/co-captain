@@ -187,3 +187,61 @@ export async function fetchCanvasData(): Promise<{
 
   return { assignments: allAssignments, courses: coursesWithGrades };
 }
+
+export interface CanvasCalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  start_at: string;
+  end_at: string;
+  location_name?: string;
+  html_url: string;
+  context_code: string; // e.g. "course_12345" or "user_12345"
+  context_name?: string;
+}
+
+export async function fetchCanvasCalendarEvents(): Promise<CanvasCalendarEvent[]> {
+  const settings = getCanvasSettings();
+  if (!settings) {
+    throw new Error("Canvas credentials not configured.");
+  }
+
+  const { canvasDomain, canvasToken } = settings;
+
+  // Fetch calendar events for the next 3 months and past 1 week
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - 7);
+  const endDate = new Date(now);
+  endDate.setMonth(endDate.getMonth() + 3);
+
+  const params = new URLSearchParams({
+    type: "event",
+    start_date: startDate.toISOString().split("T")[0],
+    end_date: endDate.toISOString().split("T")[0],
+    per_page: "100",
+  });
+
+  try {
+    const events: any[] = await canvasFetch(
+      `/calendar_events?${params.toString()}`,
+      canvasToken,
+      canvasDomain
+    );
+
+    return events.map((e) => ({
+      id: `canvas-event-${e.id}`,
+      title: e.title,
+      description: e.description,
+      start_at: e.start_at,
+      end_at: e.end_at,
+      location_name: e.location_name,
+      html_url: e.html_url,
+      context_code: e.context_code,
+      context_name: e.context_name,
+    }));
+  } catch (error) {
+    console.error("Error fetching Canvas calendar events:", error);
+    return [];
+  }
+}

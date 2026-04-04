@@ -1,5 +1,5 @@
 // Google Calendar API Service
-// Uses Supabase OAuth provider token for authentication
+// Uses Supabase Edge Function for OAuth with refresh token support
 
 import { supabase } from '@/integrations/supabase/client';
 
@@ -20,73 +20,72 @@ export interface GoogleCalendarEvent {
 }
 
 class GoogleCalendarService {
-  // Get the Google provider token from the current Supabase session
-  private async getProviderToken(): Promise<string | null> {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.provider_token ?? null;
-  }
-
-  // Check if the user signed in via Google (has a provider token)
+  // Check if the user has Google Calendar tokens stored in the database
   async isAuthenticated(): Promise<boolean> {
-    const token = await this.getProviderToken();
-    return !!token;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return false;
+
+    const { data, error } = await supabase.functions.invoke('google-calendar-auth/status', {
+      method: 'GET',
+    });
+
+    return data?.connected === true;
   }
 
-  // Connect Google Calendar by re-authenticating with calendar scope
+  // Start OAuth flow — if not signed in, sign in with Google first (which also gets calendar scope)
+  // If already signed in, use the Edge Function for a separate calendar-only OAuth
   async connect(): Promise<void> {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/settings`,
-        scopes: 'https://www.googleapis.com/auth/calendar.readonly',
-      },
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      // Not signed in at all — sign in with Google via Supabase, requesting calendar scope
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/settings`,
+          scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+        },
+      });
+      if (error) throw error;
+      return; // Will redirect to Google
+    }
+
+    // Already signed in — use Edge Function for calendar OAuth with refresh token
+    const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+      body: {},
+    });
+
+    if (error) throw error;
+    if (!data?.authUrl) throw new Error('Failed to get authorization URL');
+
+    // Redirect to Google's consent screen
+    window.location.href = data.authUrl;
+  }
+
+  // Disconnect — remove tokens from database via Edge Function
+  async disconnect(): Promise<void> {
+    const { error } = await supabase.functions.invoke('google-calendar-auth/disconnect', {
+      method: 'POST',
+      body: {},
     });
     if (error) throw error;
   }
 
-  // Disconnect just clears the local awareness; user stays signed in
-  // A full disconnect would require revoking the token at Google
-  disconnect(): void {
-    // No-op: the provider token lives in the Supabase session.
-    // To fully revoke, call the Google revoke endpoint.
-  }
-
-  // Fetch calendar events using the Supabase session's provider token
+  // Fetch calendar events via Edge Function (auto-refreshes expired tokens)
   async getEvents(timeMin?: string, timeMax?: string): Promise<GoogleCalendarEvent[]> {
-    const token = await this.getProviderToken();
-    if (!token) {
-      throw new Error('Not authenticated with Google. Please sign in with Google first.');
-    }
-
-    const params = new URLSearchParams({
-      singleEvents: 'true',
-      orderBy: 'startTime',
+    const { data, error } = await supabase.functions.invoke('google-calendar-auth/events', {
+      method: 'GET',
     });
 
-    if (timeMin) params.append('timeMin', timeMin);
-    if (timeMax) params.append('timeMax', timeMax);
-
-    const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('Google token expired. Please sign in with Google again.');
-      }
-      if (response.status === 403) {
-        throw new Error('Calendar access not granted. Please reconnect with calendar permissions.');
-      }
-      throw new Error('Failed to fetch calendar events');
+    if (error) {
+      throw new Error('Failed to fetch calendar events. Please reconnect Google Calendar.');
     }
 
-    const data = await response.json();
-    return data.items || [];
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    return data?.events || [];
   }
 }
 

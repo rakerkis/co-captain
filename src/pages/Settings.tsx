@@ -46,84 +46,60 @@ const SettingsPage = () => {
       }
     }
 
-    // Check URL hash for OAuth error FIRST
-    let hashError: string | null = null;
-    const hash = window.location.hash;
-    if (hash.includes("error")) {
-      const params = new URLSearchParams(hash.substring(1));
-      hashError = params.get("error_description") || params.get("error") || "OAuth failed";
-      console.error("[Settings] OAuth error in URL hash:", hashError);
-      setGoogleError(hashError);
-      // Clean up the URL hash
-      window.history.replaceState(null, "", window.location.pathname);
-    }
+    // Check URL params for OAuth callback result
+    const params = new URLSearchParams(window.location.search);
+    const googleAuth = params.get("google_auth");
+    const googleEmail = params.get("google_email");
 
-    const markConnected = (email: string, showToast = false) => {
-      window.localStorage.setItem("google-connected-email", email);
+    if (googleAuth === "success") {
+      const email = googleEmail || "";
+      if (email) window.localStorage.setItem("google-connected-email", email);
       setSettings((prev) => ({
         ...prev,
         googleConnected: true,
-        googleEmail: email,
+        googleEmail: email || window.localStorage.getItem("google-connected-email") || "",
       }));
       setGoogleError(null);
       setGoogleStatus("Connected successfully!");
-      if (showToast) {
-        toast({
-          title: "Google Connected",
-          description: `Connected as ${email}`,
-        });
+      toast({ title: "Google Connected", description: `Connected as ${email}` });
+      // Clean up URL params
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
+    // Check connection status via Edge Function
+    const checkStatus = async () => {
+      try {
+        // First check if we just signed in with Google (Supabase OAuth gives a provider_token)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.provider_token && session?.user?.app_metadata?.provider === 'google') {
+          // We have a fresh Google token from Supabase sign-in — mark as connected
+          const email = session.user?.email || "";
+          if (email) window.localStorage.setItem("google-connected-email", email);
+          setSettings((prev) => ({
+            ...prev,
+            googleConnected: true,
+            googleEmail: email,
+          }));
+          setGoogleStatus("Connected successfully!");
+          return;
+        }
+
+        const isConnected = await googleCalendar.isAuthenticated();
+        if (isConnected) {
+          const savedEmail = window.localStorage.getItem("google-connected-email") || "";
+          setSettings((prev) => ({
+            ...prev,
+            googleConnected: true,
+            googleEmail: savedEmail,
+          }));
+        }
+      } catch {
+        // Not connected or not signed in
       }
     };
-
-    // Listen for auth state changes (catches the OAuth redirect)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("[Settings] Auth state change:", _event, {
-        hasProviderToken: !!session?.provider_token,
-        provider: session?.user?.app_metadata?.provider,
-        email: session?.user?.email,
-      });
-
-      if (session?.provider_token) {
-        markConnected(session.user?.email || "", true);
-      } else if (session?.user?.app_metadata?.provider === 'google' ||
-                 session?.user?.identities?.some(i => i.provider === 'google')) {
-        const savedEmail = window.localStorage.getItem("google-connected-email") || session.user?.email || "";
-        setSettings((prev) => ({
-          ...prev,
-          googleConnected: true,
-          googleEmail: savedEmail,
-        }));
-      }
-    });
-
-    // Also check current session (don't overwrite hash error)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("[Settings] Session check:", {
-        hasSession: !!session,
-        hasProviderToken: !!session?.provider_token,
-        provider: session?.user?.app_metadata?.provider,
-        identities: session?.user?.identities?.map(i => i.provider),
-        email: session?.user?.email,
-      });
-
-      if (session?.provider_token) {
-        markConnected(session.user?.email || "", false);
-      } else if (session?.user?.app_metadata?.provider === 'google' ||
-                 session?.user?.identities?.some(i => i.provider === 'google')) {
-        const savedEmail = window.localStorage.getItem("google-connected-email") || session.user?.email || "";
-        setSettings((prev) => ({
-          ...prev,
-          googleConnected: true,
-          googleEmail: savedEmail,
-        }));
-        if (!hashError) {
-          setGoogleError("Google Calendar token expired. Please reconnect to sync events.");
-        }
-      }
-      // Don't clear googleError here — preserve hash errors
-    });
-
-    return () => subscription.unsubscribe();
+    if (googleAuth !== "success") {
+      checkStatus();
+    }
   }, []);
 
   const handleSave = async () => {
@@ -149,8 +125,12 @@ const SettingsPage = () => {
 
   const handleConnectGoogle = async () => {
     if (settings.googleConnected) {
-      // Disconnect — clear local state
-      googleCalendar.disconnect();
+      // Disconnect — remove tokens from DB
+      try {
+        await googleCalendar.disconnect();
+      } catch (e) {
+        console.error("Disconnect error:", e);
+      }
       window.localStorage.removeItem("google-connected-email");
       setSettings((prev) => ({ ...prev, googleConnected: false, googleEmail: "" }));
       setGoogleError(null);

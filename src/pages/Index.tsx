@@ -3,6 +3,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useCanvasAssignments, useToggleAssignment, type CanvasAssignment } from "@/hooks/useCanvasAssignments";
 import { useCustomAssignments, useToggleCustomAssignment, type CustomAssignment } from "@/hooks/useCustomAssignments";
 import { useGoogleCalendarEvents, useGoogleCalendarAuth, useGoogleCalendarDisconnect, type GoogleCalendarEvent } from "@/hooks/useGoogleCalendar";
+import { useCanvasCalendarEvents } from "@/hooks/useCanvasCalendarEvents";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { Badge } from "@/components/ui/badge";
 import { format, startOfDay, isPast, startOfWeek, endOfWeek, addDays, isSameDay, startOfMonth, endOfMonth, getDay, addMonths, subMonths, addWeeks, subWeeks } from "date-fns";
@@ -26,6 +27,7 @@ type CombinedAssignment = {
   completed: boolean;
   isCustom: boolean;
   isGoogleEvent: boolean;
+  isCanvasEvent: boolean;
   description?: string;
 };
 
@@ -38,6 +40,7 @@ const Index = () => {
   const { data: customAssignments } = useCustomAssignments();
   const toggleCustomAssignment = useToggleCustomAssignment();
   const { data: googleCalendarData } = useGoogleCalendarEvents();
+  const { data: canvasCalendarEvents } = useCanvasCalendarEvents();
   const googleCalendarAuth = useGoogleCalendarAuth();
   const googleCalendarDisconnect = useGoogleCalendarDisconnect();
   const { hiddenCalendarIds } = useHiddenCourses();
@@ -62,13 +65,29 @@ const Index = () => {
   const canvasAssignments = data?.assignments || [];
   const customAssignmentsList = customAssignments || [];
   const googleEvents = googleCalendarData?.events || [];
+  const canvasEvents = canvasCalendarEvents || [];
   const isGoogleConnected = googleCalendarData?.isConnected || false;
 
-  // Combine Canvas, custom assignments, and Google Calendar events (filter hidden courses)
+  // Combine Canvas assignments, Canvas calendar events, custom assignments, and Google Calendar events
   const allAssignments: CombinedAssignment[] = useMemo(() => {
     const canvas = canvasAssignments
       .filter((a: any) => !hiddenCalendarIds.includes(a.course_id))
-      .map((a: any) => ({ ...a, course_id: a.course_id, isCustom: false, isGoogleEvent: false }));
+      .map((a: any) => ({ ...a, course_id: a.course_id, isCustom: false, isGoogleEvent: false, isCanvasEvent: false }));
+    const canvasCal = canvasEvents.map((event) => ({
+      id: event.id,
+      name: event.title,
+      due_at: event.start_at,
+      course_name: event.context_name || "Canvas Calendar",
+      course_code: "",
+      course_id: event.context_code || "canvas-calendar",
+      priority: "medium" as const,
+      html_url: event.html_url,
+      completed: false,
+      isCustom: false,
+      isGoogleEvent: false,
+      isCanvasEvent: true,
+      description: event.description,
+    }));
     const custom = customAssignmentsList.map((a) => ({
       ...a,
       id: a.id,
@@ -82,6 +101,7 @@ const Index = () => {
       completed: a.completed,
       isCustom: true,
       isGoogleEvent: false,
+      isCanvasEvent: false,
     }));
     const google = googleEvents.map((event) => ({
       id: event.id,
@@ -95,10 +115,11 @@ const Index = () => {
       completed: false,
       isCustom: false,
       isGoogleEvent: true,
+      isCanvasEvent: false,
       description: event.description,
     }));
-    return [...canvas, ...custom, ...google];
-  }, [canvasAssignments, customAssignmentsList, googleEvents, hiddenCalendarIds]);
+    return [...canvas, ...canvasCal, ...custom, ...google];
+  }, [canvasAssignments, canvasEvents, customAssignmentsList, googleEvents, hiddenCalendarIds]);
 
   // Get assignments for a specific date
   const getAssignmentsForDate = (date: Date) => {
@@ -122,7 +143,7 @@ const Index = () => {
   };
 
   const handleToggleAssignment = (assignment: CombinedAssignment) => {
-    if (assignment.isGoogleEvent) return;
+    if (assignment.isGoogleEvent || assignment.isCanvasEvent) return;
     if (assignment.isCustom) {
       toggleCustomAssignment.mutate({
         id: assignment.id as string,
@@ -203,7 +224,11 @@ const Index = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start gap-3">
-                <div className={`w-4 h-4 rounded-full mt-1 shrink-0 ${getCourseColor(selectedEvent.course_id || 'default')}`} />
+                {getSourceIcon(selectedEvent) ? (
+                  <div className="mt-1 shrink-0 [&>img]:w-5 [&>img]:h-5">{getSourceIcon(selectedEvent)}</div>
+                ) : (
+                  <div className={`w-5 h-5 rounded-full mt-1 shrink-0 ${getCourseColor(selectedEvent.course_id || 'default')}`} />
+                )}
                 <div className="flex-1">
                   <h2 className={`text-2xl font-bold ${selectedEvent.completed ? 'line-through text-muted-foreground' : ''}`}>
                     {selectedEvent.name}
@@ -230,7 +255,7 @@ const Index = () => {
               )}
 
               <div className="flex items-center gap-4 border-t pt-4">
-                {!selectedEvent.isGoogleEvent && (
+                {!selectedEvent.isGoogleEvent && !selectedEvent.isCanvasEvent && (
                   <div className="flex items-center gap-2">
                     <Checkbox
                       checked={selectedEvent.completed || false}
@@ -258,6 +283,17 @@ const Index = () => {
     );
   };
 
+  // Source icon for event
+  const getSourceIcon = (assignment: CombinedAssignment) => {
+    if (assignment.isGoogleEvent) {
+      return <img src="/google-calendar-icon.svg" alt="" className="w-3.5 h-3.5 shrink-0 rounded-[2px]" />;
+    }
+    if (!assignment.isCustom) {
+      return <img src="/canvas-icon.svg" alt="" className="w-3.5 h-3.5 shrink-0 rounded-[2px]" />;
+    }
+    return null;
+  };
+
   // Render an event pill
   const renderEventPill = (assignment: CombinedAssignment, compact = false) => (
     <button
@@ -266,10 +302,13 @@ const Index = () => {
         e.stopPropagation();
         setSelectedEvent(assignment);
       }}
-      className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap max-w-full text-left w-full hover:opacity-80 transition-opacity`}
+      className={`${getCourseColor(assignment.course_id || 'default')} text-white text-[10px] px-1.5 py-0.5 rounded overflow-hidden text-ellipsis whitespace-nowrap max-w-full text-left w-full hover:opacity-80 transition-opacity flex items-center gap-1`}
     >
-      {compact && assignment.due_at ? `${format(new Date(assignment.due_at), "h:mm a")} ` : ""}
-      {assignment.name}
+      {getSourceIcon(assignment)}
+      <span className="overflow-hidden text-ellipsis">
+        {compact && assignment.due_at ? `${format(new Date(assignment.due_at), "h:mm a")} ` : ""}
+        {assignment.name}
+      </span>
     </button>
   );
 
@@ -447,7 +486,7 @@ const Index = () => {
                       onClick={() => setSelectedEvent(event)}
                       className="w-full flex items-center gap-3 px-4 py-2 hover:bg-accent/30 transition-colors text-left"
                     >
-                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${getCourseColor(event.course_id || 'default')}`} />
+                      {getSourceIcon(event) || <div className={`w-3.5 h-3.5 rounded-full shrink-0 ${getCourseColor(event.course_id || 'default')}`} />}
                       <div className="w-24 shrink-0 text-sm text-muted-foreground">
                         {hasTime ? format(eventDate!, "h:mm – ") : ""}
                         {hasTime && eventDate ? format(new Date(eventDate.getTime() + 3600000), "h:mma") : "All day"}

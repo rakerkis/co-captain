@@ -37,29 +37,25 @@ export const useGoogleCalendarAuth = () => {
 };
 
 export const useGoogleCalendarEvents = () => {
-  const [hasProviderToken, setHasProviderToken] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setHasProviderToken(!!session?.provider_token);
+      setIsSignedIn(!!session);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setHasProviderToken(!!session?.provider_token);
+      setIsSignedIn(!!session);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   return useQuery({
-    queryKey: ["google-calendar-events", hasProviderToken],
+    queryKey: ["google-calendar-events"],
     queryFn: async () => {
-      if (!hasProviderToken) {
-        return { events: [], isConnected: false };
-      }
-
       try {
         const events = await googleCalendar.getEvents();
         return { events: events as GoogleCalendarEvent[], isConnected: true };
@@ -67,9 +63,9 @@ export const useGoogleCalendarEvents = () => {
         return { events: [], isConnected: false };
       }
     },
-    enabled: hasProviderToken,
+    enabled: isSignedIn,
     retry: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 };
 
