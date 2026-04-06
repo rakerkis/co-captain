@@ -1,9 +1,9 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.cocaptain.app',
+  appId: 'com.co-captain.app',
   appName: 'Co-Captain',
-  webDir: 'dist'
+  webDir: 'dist',
 };
 
 export default config;

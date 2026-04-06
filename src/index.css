@@ -80,3 +80,8 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* iOS safe area support */
+.mobile-tab-bar {
+  padding-bottom: env(safe-area-inset-bottom);
+}

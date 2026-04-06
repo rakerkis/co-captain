@@ -1,15 +1,17 @@
-// Direct Canvas API client using per-user credentials from localStorage
+// Direct Canvas API client using per-user credentials
+// Credentials are stored in the device Keychain/Keystore on native, localStorage on web
 // Uses a CORS proxy for browser requests since Canvas doesn't support CORS
 
 import { supabase } from "@/integrations/supabase/client";
+import { secureStorage } from "@/integrations/secureStorage";
 
 interface CanvasSettings {
   canvasDomain: string;
   canvasToken: string;
 }
 
-function getCanvasSettings(): CanvasSettings | null {
-  const saved = window.localStorage.getItem("co-captain-settings");
+async function getCanvasSettings(): Promise<CanvasSettings | null> {
+  const saved = await secureStorage.getItem("co-captain-settings");
   if (!saved) return null;
   try {
     const parsed = JSON.parse(saved);
@@ -82,7 +84,7 @@ export async function fetchCanvasData(): Promise<{
   assignments: CanvasEnrichedAssignment[];
   courses: CanvasCourseWithGrades[];
 }> {
-  const settings = getCanvasSettings();
+  const settings = await getCanvasSettings();
   if (!settings) {
     throw new Error("Canvas credentials not configured. Go to Settings to add your Canvas domain and API token.");
   }
@@ -201,7 +203,7 @@ export interface CanvasCalendarEvent {
 }
 
 export async function fetchCanvasCalendarEvents(): Promise<CanvasCalendarEvent[]> {
-  const settings = getCanvasSettings();
+  const settings = await getCanvasSettings();
   if (!settings) {
     throw new Error("Canvas credentials not configured.");
   }

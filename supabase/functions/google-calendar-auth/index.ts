@@ -53,9 +53,11 @@ serve(async (req) => {
         throw new Error('Failed to exchange code for tokens');
       }
 
-      // Parse state to get user ID
-      const userId = state ? JSON.parse(state).userId : null;
-      
+      // Parse state to get user ID and optional redirect scheme (for native apps)
+      const parsedState = state ? JSON.parse(state) : {};
+      const userId = parsedState.userId ?? null;
+      const redirectScheme = parsedState.redirectScheme ?? null;
+
       if (!userId) {
         throw new Error('No user ID in state');
       }
@@ -91,14 +93,40 @@ serve(async (req) => {
         }
       } catch { /* ignore */ }
 
-      // Redirect back to settings page
-      const redirectUrl = new URL('/settings', Deno.env.get('SUPABASE_URL')!.replace('.supabase.co', ''));
-      // Use the app's origin (localhost in dev, production URL otherwise)
+      const successParams = `google_auth=success&google_email=${encodeURIComponent(googleEmail)}`;
+
+      if (redirectScheme) {
+        // Native app: use a JS redirect page instead of a bare 302.
+        // On iOS 16+, SFSafariViewController silently drops server-side 302
+        // redirects to custom URL schemes. A JS redirect (or a tappable link)
+        // is handled at the page level and correctly triggers the OS URL
+        // handler, which fires appUrlOpen in App.tsx.
+        const returnUrl = `${redirectScheme}://settings?${successParams}`;
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connected!</title>
+  <script>window.location.replace('${returnUrl}');</script>
+</head>
+<body style="font-family:-apple-system,sans-serif;text-align:center;padding:3rem 1.5rem;background:#fff">
+  <p style="font-size:3rem;margin:0">&#10003;</p>
+  <h2 style="margin:0.5rem 0">Google Calendar connected!</h2>
+  <p style="color:#555;margin:0.5rem 0 1.5rem">Returning to the app&hellip;</p>
+  <a href="${returnUrl}" style="display:inline-block;padding:0.75rem 2rem;background:#4285f4;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:1rem">Open App</a>
+</body>
+</html>`;
+        return new Response(html, {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'text/html' },
+        });
+      }
+
+      // Web: standard redirect to the settings page
       return new Response(null, {
         status: 302,
-        headers: {
-          'Location': `${Deno.env.get('APP_URL') || 'http://localhost:8080'}/settings?google_auth=success&google_email=${encodeURIComponent(googleEmail)}`,
-        },
+        headers: { 'Location': `${Deno.env.get('APP_URL') || 'http://localhost:8080'}/settings?${successParams}` },
       });
     }
 
@@ -117,6 +145,9 @@ serve(async (req) => {
 
     // Handle OAuth initiation
     if ((path === 'google-calendar-auth' || path === 'initiate') && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const redirectSchemeFromClient = body.redirectScheme ?? null;
+
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.set('client_id', clientId!);
       authUrl.searchParams.set('redirect_uri', redirectUri);
@@ -124,12 +155,34 @@ serve(async (req) => {
       authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly');
       authUrl.searchParams.set('access_type', 'offline');
       authUrl.searchParams.set('prompt', 'consent');
-      authUrl.searchParams.set('state', JSON.stringify({ userId: user.id }));
+      authUrl.searchParams.set('state', JSON.stringify({ userId: user.id, redirectScheme: redirectSchemeFromClient }));
 
       return new Response(
         JSON.stringify({ authUrl: authUrl.toString() }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Store tokens directly (used after Google sign-in to auto-connect calendar)
+    if (path === 'store' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const { access_token, refresh_token } = body;
+      if (!access_token) throw new Error('No access_token provided');
+
+      const expiresAt = new Date(Date.now() + 3600 * 1000); // Google tokens expire in 1h
+      const { error: dbError } = await supabase
+        .from('google_calendar_tokens')
+        .upsert({
+          user_id: user.id,
+          access_token,
+          refresh_token: refresh_token || null,
+          expires_at: expiresAt.toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (dbError) throw new Error('Failed to store tokens');
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Check connection status
@@ -250,6 +303,46 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+
+    // If this was an OAuth callback (GET with ?code=), show an HTML error page
+    // rather than raw JSON so the user isn't left stranded in SFSafariViewController.
+    const reqUrl = new URL(req.url);
+    if (req.method === 'GET' && reqUrl.searchParams.has('code')) {
+      const state = reqUrl.searchParams.get('state') ?? '';
+      let redirectScheme: string | null = null;
+      try { redirectScheme = JSON.parse(state).redirectScheme ?? null; } catch { /* ignore */ }
+      const returnUrl = redirectScheme ? `${redirectScheme}://` : null;
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connection Failed</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f2f2f7; color: #1c1c1e; }
+    .card { background: white; border-radius: 16px; padding: 40px 28px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.08); max-width: 320px; width: 90%; }
+    .icon { font-size: 52px; margin-bottom: 16px; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+    p { font-size: 15px; color: #6e6e73; line-height: 1.4; margin-bottom: 24px; }
+    .btn { display: inline-block; background: #007aff; color: white; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-size: 16px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">❌</div>
+    <h1>Connection Failed</h1>
+    <p>Could not connect Google Calendar. Please try again.</p>
+    ${returnUrl ? `<a href="${returnUrl}" class="btn">Return to Co-Captain</a>` : ''}
+  </div>
+</body>
+</html>`;
+      return new Response(html, {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'text/html' },
+      });
+    }
+
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

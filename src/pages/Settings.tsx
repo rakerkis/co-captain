@@ -1,13 +1,17 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Settings, Save, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { localStorage } from "@/integrations/storage";
+import { secureStorage } from "@/integrations/secureStorage";
 import { supabase } from "@/integrations/supabase/client";
 import { googleCalendar } from "@/integrations/googleCalendar";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
+import { App as CapApp } from "@capacitor/app";
 
 interface SettingsData {
   canvasDomain: string;
@@ -20,9 +24,12 @@ interface SettingsData {
 
 const SettingsPage = () => {
   const { toast } = useToast();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
   const [settings, setSettings] = useState<SettingsData>({
     canvasDomain: "frs.instructure.com",
     canvasToken: "",
@@ -34,20 +41,47 @@ const SettingsPage = () => {
 
   const [googleStatus, setGoogleStatus] = useState<string | null>(null);
 
+  // Run once on mount: load persisted settings and check current auth status
   useEffect(() => {
-    // Load settings from local storage
-    const savedSettings = localStorage.getItem("co-captain-settings");
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        setSettings((prev) => ({ ...prev, ...parsed }));
-      } catch (e) {
-        console.error("Failed to parse settings:", e);
+    secureStorage.getItem("co-captain-settings").then((savedSettings) => {
+      if (savedSettings) {
+        try {
+          const parsed = JSON.parse(savedSettings);
+          setSettings((prev) => ({ ...prev, ...parsed }));
+        } catch (e) {
+          console.error("Failed to parse settings:", e);
+        }
       }
-    }
+    });
 
-    // Check URL params for OAuth callback result
-    const params = new URLSearchParams(window.location.search);
+    const checkStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.provider_token && session?.user?.app_metadata?.provider === 'google') {
+          const email = session.user?.email || "";
+          if (email) window.localStorage.setItem("google-connected-email", email);
+          setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: email }));
+          setGoogleStatus("Connected successfully!");
+          return;
+        }
+
+        const isConnected = await googleCalendar.isAuthenticated();
+        if (isConnected) {
+          const savedEmail = window.localStorage.getItem("google-connected-email") || "";
+          setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: savedEmail }));
+        }
+      } catch {
+        // Not connected or not signed in
+      }
+    };
+    checkStatus();
+  }, []);
+
+  // Re-runs whenever the URL changes — handles the OAuth callback that
+  // appUrlOpen delivers via navigate('/settings?google_auth=success&...')
+  // while this component is already mounted.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
     const googleAuth = params.get("google_auth");
     const googleEmail = params.get("google_email");
 
@@ -65,48 +99,67 @@ const SettingsPage = () => {
       // Clean up URL params
       window.history.replaceState(null, "", window.location.pathname);
     }
+  }, [location.search, toast]);
 
-    // Check connection status via Edge Function
-    const checkStatus = async () => {
+  // Primary signal: appUrlOpen in App.tsx dispatches this event immediately after
+  // the code exchange completes. This is independent of React Router, navigate(),
+  // and provider_token availability — it fires in all three auth paths.
+  useEffect(() => {
+    const refreshDebugLog = () => {
       try {
-        // First check if we just signed in with Google (Supabase OAuth gives a provider_token)
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.provider_token && session?.user?.app_metadata?.provider === 'google') {
-          // We have a fresh Google token from Supabase sign-in — mark as connected
-          const email = session.user?.email || "";
-          if (email) window.localStorage.setItem("google-connected-email", email);
-          setSettings((prev) => ({
-            ...prev,
-            googleConnected: true,
-            googleEmail: email,
-          }));
-          setGoogleStatus("Connected successfully!");
-          return;
-        }
-
-        const isConnected = await googleCalendar.isAuthenticated();
-        if (isConnected) {
-          const savedEmail = window.localStorage.getItem("google-connected-email") || "";
-          setSettings((prev) => ({
-            ...prev,
-            googleConnected: true,
-            googleEmail: savedEmail,
-          }));
-        }
-      } catch {
-        // Not connected or not signed in
-      }
+        const raw = window.localStorage.getItem("co-captain-auth-log");
+        setDebugLog(raw ? JSON.parse(raw) : []);
+      } catch { /* ignore */ }
     };
-    if (googleAuth !== "success") {
-      checkStatus();
-    }
+
+    const handler = (e: Event) => {
+      const email = (e as CustomEvent<{ email: string }>).detail?.email || window.localStorage.getItem("google-connected-email") || "";
+      if (email) window.localStorage.setItem("google-connected-email", email);
+      setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: email }));
+      setGoogleError(null);
+      setGoogleStatus("Connected successfully!");
+      setGoogleLoading(false);
+      toast({ title: "Google Connected", description: `Connected as ${email || "your Google account"}` });
+      refreshDebugLog();
+    };
+    window.addEventListener("co-captain:google-auth-done", handler);
+    refreshDebugLog(); // load on mount
+    return () => window.removeEventListener("co-captain:google-auth-done", handler);
+  }, [toast]);
+
+  // Fallback: when the app returns to foreground, wait 3 s to let appUrlOpen's
+  // async code exchange finish, then re-check the DB. Covers slow exchanges
+  // and the Edge Function calendar OAuth path (tokens stored server-side).
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const listenerPromise = CapApp.addListener("appStateChange", ({ isActive }) => {
+      if (!isActive) return;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        try {
+          const connected = await googleCalendar.isAuthenticated();
+          if (connected) {
+            const email = window.localStorage.getItem("google-connected-email") || "";
+            setSettings((prev) => {
+              if (prev.googleConnected) return prev; // already updated by custom event
+              return { ...prev, googleConnected: true, googleEmail: email };
+            });
+          }
+        } catch { /* ignore — user might not be signed in yet */ }
+      }, 3000);
+    });
+    return () => {
+      clearTimeout(timeoutId);
+      listenerPromise.then((l) => l.remove());
+    };
   }, []);
 
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Save to local storage
-      localStorage.setItem("co-captain-settings", JSON.stringify(settings));
+      // Save to secure storage (Keychain on native, localStorage on web)
+      await secureStorage.setItem("co-captain-settings", JSON.stringify(settings));
       
       toast({
         title: "Settings Saved",
@@ -132,7 +185,11 @@ const SettingsPage = () => {
         console.error("Disconnect error:", e);
       }
       window.localStorage.removeItem("google-connected-email");
-      setSettings((prev) => ({ ...prev, googleConnected: false, googleEmail: "" }));
+        
+        const newSettings = { ...settings, googleConnected: false, googleEmail: "" };
+        setSettings(newSettings);
+        secureStorage.setItem("co-captain-settings", JSON.stringify(newSettings)).catch(console.error);
+        
       setGoogleError(null);
       setGoogleStatus(null);
       toast({
@@ -145,16 +202,51 @@ const SettingsPage = () => {
     setGoogleLoading(true);
     setGoogleError(null);
     try {
-      // Use Supabase Google OAuth with calendar scope
-      await googleCalendar.connect();
+      const result = await googleCalendar.connect();
+      if (result === 'redirecting') {
+        // In-app browser opened for OAuth. appUrlOpen in App.tsx handles the
+        // URL callback and navigates here with ?google_auth=success. Also add a
+        // browserFinished listener as a fallback for when the user manually
+        // closes the browser (e.g. taps the "Done" button) after authorizing.
+        if (Capacitor.isNativePlatform()) {
+          const listener = await Browser.addListener('browserFinished', async () => {
+            listener.remove();
+            try {
+              const connected = await googleCalendar.isAuthenticated();
+              if (connected) {
+                const email = window.localStorage.getItem("google-connected-email") || "";
+                setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: email }));
+                setGoogleStatus("Connected successfully!");
+                toast({ title: "Google Connected", description: "Google Calendar is now connected." });
+              }
+            } catch { /* ignore — appUrlOpen path already handled it */ }
+          });
+        }
+        return;
+      }
+      // Re-check auth status to see if the user successfully connected.
+      const connected = await googleCalendar.isAuthenticated();
+      if (connected) {
+        const email = window.localStorage.getItem("google-connected-email") || "";
+        
+        const newSettings = { ...settings, googleConnected: true, googleEmail: email };
+        setSettings(newSettings);
+        secureStorage.setItem("co-captain-settings", JSON.stringify(newSettings)).catch(console.error);
+        
+        setGoogleStatus("Connected successfully!");
+        toast({ title: "Google Connected", description: "Google Calendar is now connected." });
+      } else {
+        setGoogleError("Could not verify connection. Please try again. [v23]");
+      }
     } catch (error: any) {
       console.error("Google OAuth error:", error);
-      setGoogleError(error.message || "Failed to connect to Google. Please try again.");
+      setGoogleError(error.message || "Failed to connect to Google. Please try again. [v23]");
       toast({
         title: "Error",
         description: "Failed to connect to Google. Please try again.",
         variant: "destructive",
       });
+    } finally {
       setGoogleLoading(false);
     }
   };
@@ -169,7 +261,7 @@ const SettingsPage = () => {
       });
     } catch (error: any) {
       console.error("Google API test failed:", error);
-      setGoogleError(error.message || "Failed to access Google Calendar. Please reconnect.");
+      setGoogleError(error.message || "Failed to access Google Calendar. Please reconnect. [v23]");
       toast({
         title: "Connection Failed",
         description: error.message || "Failed to access Google Calendar. Please reconnect.",
@@ -302,7 +394,7 @@ const SettingsPage = () => {
               </>
             )}
             {googleError && (
-              <p className="text-sm text-red-500 font-medium">{googleError}</p>
+              <p className="text-sm text-red-500 font-medium">{googleError} [v23]</p>
             )}
             {googleStatus && !googleError && (
               <p className="text-sm text-green-500 font-medium">{googleStatus}</p>
@@ -365,6 +457,43 @@ const SettingsPage = () => {
           <Save className="w-4 h-4 mr-2" />
           {loading ? "Saving..." : "Save Settings"}
         </Button>
+
+        {/* Auth Debug Panel */}
+        <div className="border rounded-lg p-3 bg-muted/40 text-xs">
+          <button
+            className="w-full flex items-center justify-between font-mono text-muted-foreground"
+            onClick={() => {
+              try {
+                const raw = window.localStorage.getItem("co-captain-auth-log");
+                setDebugLog(raw ? JSON.parse(raw) : []);
+              } catch { /* ignore */ }
+              setShowDebug((v) => !v);
+            }}
+          >
+            <span>Auth Debug Log ({debugLog.length} entries)</span>
+            <span>{showDebug ? "▲" : "▼"}</span>
+          </button>
+          {showDebug && (
+            <div className="mt-2 space-y-0.5">
+              {debugLog.length === 0 ? (
+                <p className="text-muted-foreground font-mono">No entries yet. Try connecting Google.</p>
+              ) : (
+                debugLog.map((entry, i) => (
+                  <p key={i} className="font-mono break-all text-[10px] leading-tight">{entry}</p>
+                ))
+              )}
+              <button
+                className="mt-2 text-red-500 font-mono"
+                onClick={() => {
+                  window.localStorage.removeItem("co-captain-auth-log");
+                  setDebugLog([]);
+                }}
+              >
+                Clear log
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

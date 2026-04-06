@@ -21,10 +21,15 @@ export interface GoogleCalendarEvent {
 
 export const useGoogleCalendarAuth = () => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
       await googleCalendar.connect();
+    },
+    onSuccess: () => {
+      // Re-fetch events now that the user may have connected
+      queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] });
     },
     onError: (error) => {
       toast({
@@ -38,6 +43,7 @@ export const useGoogleCalendarAuth = () => {
 
 export const useGoogleCalendarEvents = () => {
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -48,10 +54,24 @@ export const useGoogleCalendarEvents = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsSignedIn(!!session);
+      if (session) {
+        // Refetch events whenever session changes (e.g. after OAuth)
+        queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] });
+      }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    // Also listen for the custom event dispatched from App.tsx after Google OAuth
+    const onGoogleDone = () => {
+      setIsSignedIn(true);
+      queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] });
+    };
+    window.addEventListener("co-captain:google-auth-done", onGoogleDone);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("co-captain:google-auth-done", onGoogleDone);
+    };
+  }, [queryClient]);
 
   return useQuery({
     queryKey: ["google-calendar-events"],
