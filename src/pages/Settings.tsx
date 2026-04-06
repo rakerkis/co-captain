@@ -31,7 +31,7 @@ const SettingsPage = () => {
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(false);
   const [settings, setSettings] = useState<SettingsData>({
-    canvasDomain: "frs.instructure.com",
+    canvasDomain: "canvas.instructure.com",
     canvasToken: "",
     googleConnected: false,
     googleEmail: "",
@@ -299,7 +299,7 @@ const SettingsPage = () => {
               <Label htmlFor="canvasDomain">Canvas Domain</Label>
               <Input
                 id="canvasDomain"
-                placeholder="frs.instructure.com"
+                  placeholder="canvas.instructure.com"
                 value={settings.canvasDomain}
                 onChange={(e) =>
                   setSettings({ ...settings, canvasDomain: e.target.value })

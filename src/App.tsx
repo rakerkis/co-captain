@@ -36,7 +36,7 @@ function authLog(msg: string) {
 }
 
 const AppLayout = ({ session }: { session: any }) => {
-  const { isIOS } = usePlatform();
+  const { isNative } = usePlatform();
   const navigate = useNavigate();
 
   // Handle deep link callbacks on native (OAuth redirects back via custom URL scheme)
@@ -208,7 +208,7 @@ const AppLayout = ({ session }: { session: any }) => {
     </Routes>
   );
 
-  if (isIOS) {
+  if (isNative) {
     return (
       <div
         className="flex flex-col w-full min-h-screen"
