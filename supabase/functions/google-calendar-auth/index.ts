@@ -130,6 +130,60 @@ serve(async (req) => {
       });
     }
 
+    // Refresh Google access token — no JWT auth required.
+    // The client passes the user_id and refresh_token (read from DB via PostgREST).
+    // This endpoint uses the server-side client_secret to perform the refresh grant.
+    if (path === 'refresh' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const { user_id, refresh_token } = body;
+
+      if (!user_id || !refresh_token) {
+        return new Response(
+          JSON.stringify({ error: 'user_id and refresh_token are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          refresh_token,
+          client_id: clientId!,
+          client_secret: clientSecret!,
+          grant_type: 'refresh_token',
+        }),
+      });
+
+      const newTokens = await refreshResponse.json();
+
+      if (!refreshResponse.ok) {
+        console.error('Google token refresh failed:', newTokens);
+        return new Response(
+          JSON.stringify({ error: newTokens.error_description || 'Token refresh failed' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update the DB with the new access token
+      const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
+      await supabase
+        .from('google_calendar_tokens')
+        .update({
+          access_token: newTokens.access_token,
+          expires_at: newExpiresAt.toISOString(),
+        })
+        .eq('user_id', user_id);
+
+      return new Response(
+        JSON.stringify({
+          access_token: newTokens.access_token,
+          expires_in: newTokens.expires_in,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // All other routes require authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {

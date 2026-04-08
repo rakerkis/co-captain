@@ -225,14 +225,15 @@ class GoogleCalendarService {
 
     let accessToken = tokenData.access_token;
 
-    // Check if Google access token is expired → try refresh via Edge Function
+    // Check if Google access token is expired → try refresh
     if (new Date(tokenData.expires_at) < new Date()) {
-      this.log("getEvents: Google token expired, attempting refresh via EF");
+      this.log(`getEvents: Google token expired (expires_at=${tokenData.expires_at}), refresh_token=${tokenData.refresh_token ? "present" : "NULL"}`);
       try {
-        accessToken = await this.refreshGoogleToken(session.access_token);
-      } catch (refreshErr: any) {
-        this.log(`getEvents: refresh failed — ${refreshErr.message}`);
-        throw new Error("Google token expired. Please reconnect in Settings.");
+        accessToken = await this.refreshGoogleToken(session.user.id, tokenData.refresh_token);
+      } catch (refreshErr) {
+        const msg = refreshErr instanceof Error ? refreshErr.message : String(refreshErr);
+        this.log(`getEvents: refresh failed — ${msg}`);
+        throw new Error(`Google token expired. Refresh failed: ${msg}`);
       }
     }
 
@@ -264,38 +265,51 @@ class GoogleCalendarService {
     return data.items || [];
   }
 
-  // Helper: refresh an expired Google access token via the Edge Function.
-  // The EF has the Google client_secret needed for the refresh grant.
-  private async refreshGoogleToken(supabaseToken: string): Promise<string> {
-    const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-auth/events`;
+  // Helper: refresh an expired Google access token using the refresh_token.
+  // Calls Google's token endpoint directly via a Supabase Edge Function proxy
+  // (since the client_secret is required and must stay server-side).
+  // Falls back to reading the refresh_token from DB and calling a dedicated
+  // refresh endpoint.
+  private async refreshGoogleToken(userId: string, refreshToken: string): Promise<string> {
+    if (!refreshToken) {
+      throw new Error("No refresh token available — please reconnect");
+    }
+
+    // Call the Edge Function's /refresh endpoint (doesn't need user JWT —
+    // we pass the refresh_token directly and the EF uses the service role).
+    const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-auth/refresh`;
     const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
     const resp = await fetch(fnUrl, {
-      method: "GET",
+      method: "POST",
       headers: {
+        "Content-Type": "application/json",
         "apikey": anonKey,
-        "Authorization": `Bearer ${supabaseToken}`,
+        "Authorization": `Bearer ${anonKey}`,
       },
+      body: JSON.stringify({ user_id: userId, refresh_token: refreshToken }),
     });
 
     if (!resp.ok) {
-      throw new Error(`Edge Function refresh failed (${resp.status})`);
+      const errBody = await resp.text();
+      this.log(`refreshGoogleToken: EF /refresh failed (${resp.status}): ${errBody.substring(0, 80)}`);
+      throw new Error(`Token refresh failed (${resp.status})`);
     }
 
-    // The EF auto-refreshes the Google token and updates the DB.
-    // Re-read the token from the DB to get the refreshed value.
-    const { data: { session } } = await supabase.auth.getSession();
-    const { data: tokenData } = await supabase
+    const data = await resp.json();
+    if (!data.access_token) {
+      throw new Error("No access_token in refresh response");
+    }
+
+    // Update the DB with the new access token
+    const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+    await supabase
       .from("google_calendar_tokens")
-      .select("access_token")
-      .eq("user_id", session?.user?.id ?? "")
-      .single();
+      .update({ access_token: data.access_token, expires_at: expiresAt })
+      .eq("user_id", userId);
 
-    if (!tokenData?.access_token) {
-      throw new Error("Token refresh failed — no token in DB");
-    }
-
-    return tokenData.access_token;
+    this.log(`refreshGoogleToken: success, new token len=${data.access_token.length}`);
+    return data.access_token;
   }
 }
 

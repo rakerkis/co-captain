@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@/lib/version";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useCanvasAssignments,
@@ -635,7 +636,7 @@ const Index = () => {
             <CardTitle className="flex items-center gap-2">
               <CalendarIcon className="w-5 h-5" />
               Calendar
-              <span className="text-xs font-normal text-muted-foreground ml-1">v24</span>
+              <span className="text-xs font-normal text-muted-foreground ml-1">{APP_VERSION}</span>
             </CardTitle>
             <div className="flex items-center gap-2">
               {/* View mode toggle — dropdown on native, button row on web */}

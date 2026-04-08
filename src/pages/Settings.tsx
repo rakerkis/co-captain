@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Settings, Save, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle, ScanLine } from "lucide-react";
+import { APP_VERSION } from "@/lib/version";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -276,11 +277,11 @@ const SettingsPage = () => {
         setGoogleStatus("Connected successfully!");
         toast({ title: "Google Connected", description: "Google Calendar is now connected." });
       } else {
-        setGoogleError("Could not verify connection. Please try again. [v23]");
+        setGoogleError(`Could not verify connection. Please try again. [${APP_VERSION}]`);
       }
     } catch (error: any) {
       console.error("Google OAuth error:", error);
-      setGoogleError(error.message || "Failed to connect to Google. Please try again. [v23]");
+      setGoogleError(error.message || `Failed to connect to Google. Please try again. [${APP_VERSION}]`);
       toast({
         title: "Error",
         description: "Failed to connect to Google. Please try again.",
@@ -301,7 +302,7 @@ const SettingsPage = () => {
       });
     } catch (error: any) {
       console.error("Google API test failed:", error);
-      setGoogleError(error.message || "Failed to access Google Calendar. Please reconnect. [v23]");
+      setGoogleError(error.message || `Failed to access Google Calendar. Please reconnect. [${APP_VERSION}]`);
       toast({
         title: "Connection Failed",
         description: error.message || "Failed to access Google Calendar. Please reconnect.",
@@ -473,7 +474,7 @@ const SettingsPage = () => {
               </>
             )}
             {googleError && (
-              <p className="text-sm text-red-500 font-medium">{googleError} [v23]</p>
+              <p className="text-sm text-red-500 font-medium">{googleError} [{APP_VERSION}]</p>
             )}
             {googleStatus && !googleError && (
               <p className="text-sm text-green-500 font-medium">{googleStatus}</p>
