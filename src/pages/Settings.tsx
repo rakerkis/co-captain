@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Settings, Save, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import { Settings, Save, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { googleCalendar } from "@/integrations/googleCalendar";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { App as CapApp } from "@capacitor/app";
+import { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } from "@capacitor/barcode-scanner";
 
 interface SettingsData {
   canvasDomain: string;
@@ -40,6 +41,8 @@ const SettingsPage = () => {
   });
 
   const [googleStatus, setGoogleStatus] = useState<string | null>(null);
+  const [tokenIsNew, setTokenIsNew] = useState(false);
+  const [maskedToken, setMaskedToken] = useState("");
 
   // Run once on mount: load persisted settings and check current auth status
   useEffect(() => {
@@ -47,7 +50,14 @@ const SettingsPage = () => {
       if (savedSettings) {
         try {
           const parsed = JSON.parse(savedSettings);
-          setSettings((prev) => ({ ...prev, ...parsed }));
+          // Don't put the real token into display state — show masked version
+          if (parsed.canvasToken) {
+            const token = parsed.canvasToken;
+            setMaskedToken(token.slice(0, 6) + "••••••••••");
+            setSettings((prev) => ({ ...prev, ...parsed, canvasToken: "" }));
+          } else {
+            setSettings((prev) => ({ ...prev, ...parsed }));
+          }
         } catch (e) {
           console.error("Failed to parse settings:", e);
         }
@@ -155,12 +165,42 @@ const SettingsPage = () => {
     };
   }, []);
 
+  const handleScanToken = async () => {
+    try {
+      const result = await CapacitorBarcodeScanner.scanBarcode({
+        hint: CapacitorBarcodeScannerTypeHint.QR_CODE,
+        scanInstructions: "Point at your Canvas token QR code",
+      });
+      if (result.ScanResult) {
+        setSettings((prev) => ({ ...prev, canvasToken: result.ScanResult }));
+        setTokenIsNew(true);
+        setMaskedToken("");
+        toast({ title: "Token Scanned", description: "Canvas API token has been filled in." });
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("canceled") || msg.includes("cancelled")) return;
+      toast({
+        title: "Scan Failed",
+        description: msg || "Could not scan QR code.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Save to secure storage (Keychain on native, localStorage on web)
+      // Save the full token to secure storage (Keychain on native, localStorage on web)
       await secureStorage.setItem("co-captain-settings", JSON.stringify(settings));
-      
+
+      // After saving, mask the token so it can't be seen again
+      if (settings.canvasToken) {
+        setMaskedToken(settings.canvasToken.slice(0, 6) + "••••••••••");
+        setSettings((prev) => ({ ...prev, canvasToken: "" }));
+        setTokenIsNew(false);
+      }
+
       toast({
         title: "Settings Saved",
         description: "Your settings have been saved successfully.",
@@ -312,18 +352,57 @@ const SettingsPage = () => {
 
             <div className="space-y-2">
               <Label htmlFor="canvasToken">API Token</Label>
-              <Input
-                id="canvasToken"
-                type="password"
-                placeholder="Enter your Canvas API token"
-                value={settings.canvasToken}
-                onChange={(e) =>
-                  setSettings({ ...settings, canvasToken: e.target.value })
-                }
-              />
+              {maskedToken && !tokenIsNew ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="canvasToken"
+                    type="text"
+                    value={maskedToken}
+                    disabled
+                    className="font-mono"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMaskedToken("");
+                      setTokenIsNew(true);
+                    }}
+                  >
+                    Change
+                  </Button>
+                </div>
+              ) : (
+                <Input
+                  id="canvasToken"
+                  type={tokenIsNew ? "text" : "password"}
+                  placeholder="Enter your Canvas API token"
+                  value={settings.canvasToken}
+                  onChange={(e) => {
+                    setSettings({ ...settings, canvasToken: e.target.value });
+                    if (!tokenIsNew) setTokenIsNew(true);
+                  }}
+                />
+              )}
               <p className="text-xs text-muted-foreground">
                 Get your token from Canvas → Account → Settings → New Access Token
               </p>
+              {Capacitor.isNativePlatform() && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleScanToken}
+                    className="w-full"
+                  >
+                    <ScanLine className="w-4 h-4 mr-2" />
+                    Scan Token QR Code
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Copy your token on a computer, paste it into any QR code generator website, then scan it here
+                  </p>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>

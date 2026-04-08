@@ -59,5 +59,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Co-Captain needs camera access to scan QR codes for your Canvas API token.</string>
 </dict>
 </plist>
