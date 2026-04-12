@@ -134,7 +134,17 @@ const SettingsPage = () => {
         outlookEmail: email || window.localStorage.getItem("outlook-connected-email") || "",
       }));
       setOutlookError(null);
+      setOutlookLoading(false);
       toast({ title: "Outlook Connected", description: `Connected as ${email}` });
+      window.history.replaceState(null, "", window.location.pathname);
+    } else if (outlookAuth === "error") {
+      setOutlookError("Failed to connect to Outlook. Please try again.");
+      setOutlookLoading(false);
+      toast({
+        title: "Outlook Connection Failed",
+        description: "Failed to exchange token with Microsoft. Please try again.",
+        variant: "destructive",
+      });
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, [location.search, toast]);

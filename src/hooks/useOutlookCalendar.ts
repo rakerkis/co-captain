@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { outlookCalendar } from "@/integrations/outlookCalendar";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -41,26 +40,22 @@ export const useOutlookCalendarAuth = () => {
 };
 
 export const useOutlookCalendarEvents = () => {
-  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsSignedIn(!!session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsSignedIn(!!session);
+    // Check if Outlook tokens exist (independent of Supabase auth)
+    outlookCalendar.isAuthenticated().then((authed) => {
+      setIsReady(authed);
     });
 
     const onOutlookDone = () => {
-      setIsSignedIn(true);
+      setIsReady(true);
       queryClient.invalidateQueries({ queryKey: ["outlook-calendar-events"] });
     };
     window.addEventListener("co-captain:outlook-auth-done", onOutlookDone);
 
     return () => {
-      subscription.unsubscribe();
       window.removeEventListener("co-captain:outlook-auth-done", onOutlookDone);
     };
   }, [queryClient]);
@@ -75,7 +70,7 @@ export const useOutlookCalendarEvents = () => {
         return { events: [], isConnected: false };
       }
     },
-    enabled: isSignedIn,
+    enabled: isReady,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });

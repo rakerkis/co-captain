@@ -3,7 +3,7 @@
 // Microsoft Graph API called directly from the client.
 // Works on web and native (Capacitor) without any Co-Captain account.
 
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { secureStorage } from "@/integrations/secureStorage";
 
@@ -115,27 +115,45 @@ class OutlookCalendarService {
 
     console.log("[Outlook] handleCallback redirect_uri:", getRedirectUri());
     console.log("[Outlook] verifier present:", !!verifier, "length:", verifier?.length);
-    const body = new URLSearchParams({
+    const bodyParams: Record<string, string> = {
       client_id: CLIENT_ID,
       grant_type: "authorization_code",
       code,
       redirect_uri: getRedirectUri(),
       code_verifier: verifier,
       scope: SCOPES,
-    });
+    };
 
-    const resp = await fetch(
-      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-      {
-        method: "POST",
+    // On native, use CapacitorHttp to avoid the WebView sending an Origin
+    // header, which causes Microsoft to reject the request with AADSTS90023.
+    let tokens: any;
+    let status: number;
+    if (Capacitor.isNativePlatform()) {
+      const nativeResp = await CapacitorHttp.post({
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      }
-    );
+        data: new URLSearchParams(bodyParams).toString(),
+      });
+      status = nativeResp.status;
+      tokens = nativeResp.data;
+    } else {
+      const resp = await fetch(
+        "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(bodyParams).toString(),
+        }
+      );
+      status = resp.status;
+      tokens = await resp.json();
+    }
 
-    const tokens = await resp.json();
-    console.log("[Outlook] token exchange status:", resp.status);
-    if (!resp.ok) {
+    console.log("[Outlook] token exchange status:", status);
+    if (status >= 400) {
+      console.error("[Outlook] token exchange error body:", JSON.stringify(tokens));
+      console.error("[Outlook] redirect_uri used:", getRedirectUri());
+      console.error("[Outlook] error:", tokens.error, "desc:", tokens.error_description);
       throw new Error(tokens.error_description || tokens.error || "Failed to exchange Outlook token");
     }
 
@@ -175,24 +193,37 @@ class OutlookCalendarService {
 
     // Refresh if expired
     if (new Date(tokens.expires_at) < new Date()) {
-      const body = new URLSearchParams({
+      const refreshParams = new URLSearchParams({
         client_id: CLIENT_ID,
         grant_type: "refresh_token",
         refresh_token: tokens.refresh_token,
         scope: SCOPES,
       });
 
-      const resp = await fetch(
-        "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-        {
-          method: "POST",
+      let newTokens: any;
+      let refreshOk: boolean;
+      if (Capacitor.isNativePlatform()) {
+        const nativeResp = await CapacitorHttp.post({
+          url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: body.toString(),
-        }
-      );
+          data: refreshParams.toString(),
+        });
+        newTokens = nativeResp.data;
+        refreshOk = nativeResp.status < 400;
+      } else {
+        const resp = await fetch(
+          "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: refreshParams.toString(),
+          }
+        );
+        newTokens = await resp.json();
+        refreshOk = resp.ok;
+      }
 
-      const newTokens = await resp.json();
-      if (!resp.ok) throw new Error("Outlook token refresh failed. Please reconnect in Settings.");
+      if (!refreshOk) throw new Error("Outlook token refresh failed. Please reconnect in Settings.");
 
       const updated: StoredTokens = {
         ...tokens,
@@ -213,27 +244,35 @@ class OutlookCalendarService {
     const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
-    const resp = await fetch(
+    const url =
       `https://graph.microsoft.com/v1.0/me/calendarView?` +
-        `startDateTime=${encodeURIComponent(timeMin)}&` +
-        `endDateTime=${encodeURIComponent(timeMax)}&` +
-        `$select=id,subject,start,end,bodyPreview,webLink&` +
-        `$orderby=start/dateTime&` +
-        `$top=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Prefer: 'outlook.timezone="UTC"',
-        },
-      }
-    );
+      `startDateTime=${encodeURIComponent(timeMin)}&` +
+      `endDateTime=${encodeURIComponent(timeMax)}&` +
+      `$select=id,subject,start,end,bodyPreview,webLink&` +
+      `$orderby=start/dateTime&` +
+      `$top=100`;
 
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error(`Microsoft Graph API error (${resp.status}): ${err}`);
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: 'outlook.timezone="UTC"',
+    };
+
+    let data: any;
+    if (Capacitor.isNativePlatform()) {
+      const nativeResp = await CapacitorHttp.get({ url, headers });
+      if (nativeResp.status >= 400) {
+        throw new Error(`Microsoft Graph API error (${nativeResp.status}): ${JSON.stringify(nativeResp.data)}`);
+      }
+      data = nativeResp.data;
+    } else {
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Microsoft Graph API error (${resp.status}): ${err}`);
+      }
+      data = await resp.json();
     }
 
-    const data = await resp.json();
     return data.value || [];
   }
 }
