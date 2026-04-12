@@ -517,15 +517,16 @@ const SettingsPage = () => {
                 <Input
                   id="syncInterval"
                   type="number"
-                  min={5}
+                  min={1}
                   max={60}
                   value={settings.syncInterval}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 15;
                     setSettings({
                       ...settings,
-                      syncInterval: parseInt(e.target.value) || 15,
-                    })
-                  }
+                      syncInterval: Math.max(1, Math.min(60, val)),
+                    });
+                  }}
                 />
               </div>
             )}

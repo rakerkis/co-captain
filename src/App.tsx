@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, focusManager } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,8 +20,76 @@ import Courses from "./pages/Courses";
 import Focus from "./pages/Focus";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import { toast } from "@/hooks/use-toast";
 
-const queryClient = new QueryClient();
+// Query keys that represent "sync" operations — we batch their results into
+// a single toast so the user sees one notification per sync cycle.
+const SYNC_QUERY_KEYS = [
+  "canvas-assignments",
+  "canvas-courses",
+  "canvas-calendar-events",
+  "google-calendar-events",
+  "custom-assignments",
+];
+
+let syncBatchTimer: ReturnType<typeof setTimeout> | null = null;
+let syncBatchErrors: string[] = [];
+let syncBatchSuccessCount = 0;
+
+function flushSyncBatch() {
+  const errors = syncBatchErrors;
+  const successes = syncBatchSuccessCount;
+  syncBatchErrors = [];
+  syncBatchSuccessCount = 0;
+  syncBatchTimer = null;
+
+  if (errors.length > 0) {
+    toast({
+      title: "Sync Failed",
+      description: errors.length === 1
+        ? errors[0]
+        : `${errors.length} sources failed to sync.`,
+      variant: "destructive",
+    });
+  } else if (successes > 0) {
+    toast({
+      title: "Sync Complete",
+      description: "All data synced successfully.",
+    });
+  }
+}
+
+function scheduleSyncToast() {
+  if (syncBatchTimer) clearTimeout(syncBatchTimer);
+  syncBatchTimer = setTimeout(flushSyncBatch, 500);
+}
+
+const queryCache = new QueryCache({
+  onError: (error, query) => {
+    const key = query.queryKey[0] as string;
+    if (!SYNC_QUERY_KEYS.includes(key)) return;
+    const label = key.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    syncBatchErrors.push(`${label}: ${error.message || "unknown error"}`);
+    scheduleSyncToast();
+  },
+  onSuccess: (_data, query) => {
+    const key = query.queryKey[0] as string;
+    if (!SYNC_QUERY_KEYS.includes(key)) return;
+    syncBatchSuccessCount++;
+    scheduleSyncToast();
+  },
+});
+
+const queryClient = new QueryClient({ queryCache });
+
+// Pause all React Query refetching when the app is in the background.
+// This prevents network requests (sync, data fetches) from firing while
+// the app is not visible, regardless of the auto-sync setting.
+if (Capacitor.isNativePlatform()) {
+  CapApp.addListener("appStateChange", ({ isActive }) => {
+    focusManager.setFocused(isActive ? true : false);
+  });
+}
 
 // Persistent auth debug log — written throughout the OAuth flow so we can
 // see exactly what happened even after the app returns to foreground.
