@@ -6,7 +6,13 @@ export type { CanvasCalendarEvent };
 export const useCanvasCalendarEvents = () => {
   return useQuery({
     queryKey: ["canvas-calendar-events"],
-    queryFn: fetchCanvasCalendarEvents,
+    queryFn: async () => {
+      try {
+        return await fetchCanvasCalendarEvents();
+      } catch {
+        return [] as CanvasCalendarEvent[];
+      }
+    },
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

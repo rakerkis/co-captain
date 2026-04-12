@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { secureStorage } from "@/integrations/secureStorage";
 import { supabase } from "@/integrations/supabase/client";
 import { googleCalendar } from "@/integrations/googleCalendar";
+import { outlookCalendar } from "@/integrations/outlookCalendar";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { App as CapApp } from "@capacitor/app";
@@ -20,6 +21,8 @@ interface SettingsData {
   canvasToken: string;
   googleConnected: boolean;
   googleEmail?: string;
+  outlookConnected: boolean;
+  outlookEmail?: string;
   autoSync: boolean;
   syncInterval: number;
 }
@@ -37,21 +40,51 @@ const SettingsPage = () => {
     canvasToken: "",
     googleConnected: false,
     googleEmail: "",
+    outlookConnected: false,
+    outlookEmail: "",
     autoSync: true,
     syncInterval: 15,
   });
 
   const [googleStatus, setGoogleStatus] = useState<string | null>(null);
+  const [outlookLoading, setOutlookLoading] = useState(false);
+  const [outlookError, setOutlookError] = useState<string | null>(null);
   const [tokenIsNew, setTokenIsNew] = useState(false);
   const [maskedToken, setMaskedToken] = useState("");
 
-  // Run once on mount: load persisted settings and check current auth status
+  // Run once on mount: load persisted settings, then check live auth status.
+  // checkStatus runs AFTER settings load so auth state always wins over stale persisted values.
   useEffect(() => {
-    secureStorage.getItem("co-captain-settings").then((savedSettings) => {
+    const checkStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.provider_token && session?.user?.app_metadata?.provider === 'google') {
+          const email = session.user?.email || "";
+          if (email) window.localStorage.setItem("google-connected-email", email);
+          setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: email }));
+          setGoogleStatus("Connected successfully!");
+        } else {
+          const isConnected = await googleCalendar.isAuthenticated();
+          if (isConnected) {
+            const savedEmail = window.localStorage.getItem("google-connected-email") || "";
+            setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: savedEmail }));
+          }
+        }
+
+        const outlookConnected = await outlookCalendar.isAuthenticated();
+        if (outlookConnected) {
+          const email = await outlookCalendar.getEmail();
+          setSettings((prev) => ({ ...prev, outlookConnected: true, outlookEmail: email }));
+        }
+      } catch {
+        // Not connected or not signed in
+      }
+    };
+
+    secureStorage.getItem("co-captain-settings").then(async (savedSettings) => {
       if (savedSettings) {
         try {
           const parsed = JSON.parse(savedSettings);
-          // Don't put the real token into display state — show masked version
           if (parsed.canvasToken) {
             const token = parsed.canvasToken;
             setMaskedToken(token.slice(0, 6) + "••••••••••");
@@ -63,29 +96,9 @@ const SettingsPage = () => {
           console.error("Failed to parse settings:", e);
         }
       }
+      // Always run after settings load so auth state wins
+      await checkStatus();
     });
-
-    const checkStatus = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.provider_token && session?.user?.app_metadata?.provider === 'google') {
-          const email = session.user?.email || "";
-          if (email) window.localStorage.setItem("google-connected-email", email);
-          setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: email }));
-          setGoogleStatus("Connected successfully!");
-          return;
-        }
-
-        const isConnected = await googleCalendar.isAuthenticated();
-        if (isConnected) {
-          const savedEmail = window.localStorage.getItem("google-connected-email") || "";
-          setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: savedEmail }));
-        }
-      } catch {
-        // Not connected or not signed in
-      }
-    };
-    checkStatus();
   }, []);
 
   // Re-runs whenever the URL changes — handles the OAuth callback that
@@ -107,7 +120,21 @@ const SettingsPage = () => {
       setGoogleError(null);
       setGoogleStatus("Connected successfully!");
       toast({ title: "Google Connected", description: `Connected as ${email}` });
-      // Clean up URL params
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
+    const outlookAuth = params.get("outlook_auth");
+    const outlookEmail = params.get("outlook_email");
+    if (outlookAuth === "success") {
+      const email = outlookEmail || "";
+      if (email) window.localStorage.setItem("outlook-connected-email", email);
+      setSettings((prev) => ({
+        ...prev,
+        outlookConnected: true,
+        outlookEmail: email || window.localStorage.getItem("outlook-connected-email") || "",
+      }));
+      setOutlookError(null);
+      toast({ title: "Outlook Connected", description: `Connected as ${email}` });
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, [location.search, toast]);
@@ -134,8 +161,22 @@ const SettingsPage = () => {
       refreshDebugLog();
     };
     window.addEventListener("co-captain:google-auth-done", handler);
+
+    const outlookHandler = (e: Event) => {
+      const email = (e as CustomEvent<{ email: string }>).detail?.email || window.localStorage.getItem("outlook-connected-email") || "";
+      if (email) window.localStorage.setItem("outlook-connected-email", email);
+      setSettings((prev) => ({ ...prev, outlookConnected: true, outlookEmail: email }));
+      setOutlookError(null);
+      setOutlookLoading(false);
+      toast({ title: "Outlook Connected", description: `Connected as ${email || "your Outlook account"}` });
+    };
+    window.addEventListener("co-captain:outlook-auth-done", outlookHandler);
+
     refreshDebugLog(); // load on mount
-    return () => window.removeEventListener("co-captain:google-auth-done", handler);
+    return () => {
+      window.removeEventListener("co-captain:google-auth-done", handler);
+      window.removeEventListener("co-captain:outlook-auth-done", outlookHandler);
+    };
   }, [toast]);
 
   // Fallback: when the app returns to foreground, wait 3 s to let appUrlOpen's
@@ -289,6 +330,58 @@ const SettingsPage = () => {
       });
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleConnectOutlook = async () => {
+    if (settings.outlookConnected) {
+      try {
+        await outlookCalendar.disconnect();
+      } catch (e) {
+        console.error("Outlook disconnect error:", e);
+      }
+      window.localStorage.removeItem("outlook-connected-email");
+      setSettings((prev) => ({ ...prev, outlookConnected: false, outlookEmail: "" }));
+      setOutlookError(null);
+      toast({ title: "Disconnected", description: "Outlook Calendar has been disconnected." });
+      return;
+    }
+
+    setOutlookLoading(true);
+    setOutlookError(null);
+    console.log("[Outlook] connect() starting...");
+    try {
+      await outlookCalendar.connect();
+      console.log("[Outlook] connect() called — should be redirecting to Microsoft");
+      // Always redirecting — callback handled by appUrlOpen (native) or App.tsx useEffect (web)
+    } catch (error: any) {
+      console.error("[Outlook] OAuth error:", error);
+      setOutlookError(error.message || `Failed to connect to Outlook. Please try again. [${APP_VERSION}]`);
+      toast({
+        title: "Error",
+        description: "Failed to connect to Outlook. Please try again.",
+        variant: "destructive",
+      });
+      setOutlookLoading(false);
+    }
+  };
+
+  const testOutlookConnection = async () => {
+    setOutlookError(null);
+    try {
+      await outlookCalendar.getEvents();
+      toast({
+        title: "Connection Successful",
+        description: "Outlook Calendar API is working!",
+      });
+    } catch (error: any) {
+      console.error("Outlook API test failed:", error);
+      setOutlookError(error.message || `Failed to access Outlook Calendar. Please reconnect. [${APP_VERSION}]`);
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Failed to access Outlook Calendar. Please reconnect.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -478,6 +571,64 @@ const SettingsPage = () => {
             )}
             {googleStatus && !googleError && (
               <p className="text-sm text-green-500 font-medium">{googleStatus}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Outlook Calendar Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ExternalLink className="w-5 h-5" />
+              Outlook Calendar
+            </CardTitle>
+            <CardDescription>
+              Connect your Microsoft Outlook Calendar to sync events
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {settings.outlookConnected ? (
+              <>
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Connected to Outlook Calendar</span>
+                </div>
+                {settings.outlookEmail && (
+                  <p className="text-sm text-muted-foreground">
+                    Signed in as <span className="font-medium text-foreground">{settings.outlookEmail}</span>
+                  </p>
+                )}
+                <Button variant="outline" onClick={handleConnectOutlook} className="w-full">
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Disconnect Outlook Account
+                </Button>
+                <Button variant="outline" size="sm" onClick={testOutlookConnection} className="w-full">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Test Connection
+                </Button>
+              </>
+            ) : (
+              <>
+                {outlookError && (
+                  <p className="text-sm text-red-500 font-medium">{outlookError} [{APP_VERSION}]</p>
+                )}
+                <Button onClick={handleConnectOutlook} disabled={outlookLoading} className="w-full">
+                  {outlookLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Connect Outlook Account
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Clicking connect will redirect you to Microsoft to authorize access
+                </p>
+              </>
             )}
           </CardContent>
         </Card>

@@ -11,6 +11,7 @@ import {
 import {
   useGoogleCalendarEvents,
 } from "@/hooks/useGoogleCalendar";
+import { useOutlookCalendarEvents } from "@/hooks/useOutlookCalendar";
 import { useCanvasCalendarEvents } from "@/hooks/useCanvasCalendarEvents";
 import { useHiddenCourses } from "@/hooks/useHiddenCourses";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,7 @@ type CombinedAssignment = {
   isCustom: boolean;
   isGoogleEvent: boolean;
   isCanvasEvent: boolean;
+  isOutlookEvent: boolean;
   description?: string;
 };
 
@@ -75,6 +77,7 @@ const Index = () => {
   const { data: customAssignments } = useCustomAssignments();
   const toggleCustomAssignment = useToggleCustomAssignment();
   const { data: googleCalendarData } = useGoogleCalendarEvents();
+  const { data: outlookCalendarData } = useOutlookCalendarEvents();
   const { data: canvasCalendarEvents } = useCanvasCalendarEvents();
   const { hiddenCalendarIds } = useHiddenCourses();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -87,6 +90,7 @@ const Index = () => {
   const canvasAssignments = data?.assignments || [];
   const customAssignmentsList = customAssignments || [];
   const googleEvents = googleCalendarData?.events || [];
+  const outlookEvents = outlookCalendarData?.events || [];
   const canvasEvents = canvasCalendarEvents || [];
 
   // Combine Canvas assignments, Canvas calendar events, custom assignments, and Google Calendar events
@@ -99,6 +103,7 @@ const Index = () => {
         isCustom: false,
         isGoogleEvent: false,
         isCanvasEvent: false,
+        isOutlookEvent: false,
       }));
     const canvasCal = canvasEvents.map((event) => ({
       id: event.id,
@@ -113,6 +118,7 @@ const Index = () => {
       isCustom: false,
       isGoogleEvent: false,
       isCanvasEvent: true,
+      isOutlookEvent: false,
       description: event.description,
     }));
     const custom = customAssignmentsList.map((a) => ({
@@ -129,6 +135,7 @@ const Index = () => {
       isCustom: true,
       isGoogleEvent: false,
       isCanvasEvent: false,
+      isOutlookEvent: false,
     }));
     const google = googleEvents.map((event) => ({
       id: event.id,
@@ -143,14 +150,32 @@ const Index = () => {
       isCustom: false,
       isGoogleEvent: true,
       isCanvasEvent: false,
+      isOutlookEvent: false,
       description: event.description,
     }));
-    return [...canvas, ...canvasCal, ...custom, ...google];
+    const outlook = outlookEvents.map((event) => ({
+      id: event.id,
+      name: event.subject,
+      due_at: event.start.dateTime,
+      course_name: "Outlook Calendar",
+      course_code: "",
+      course_id: "outlook-calendar",
+      priority: "medium" as const,
+      html_url: event.webLink || "",
+      completed: false,
+      isCustom: false,
+      isGoogleEvent: false,
+      isCanvasEvent: false,
+      isOutlookEvent: true,
+      description: event.bodyPreview,
+    }));
+    return [...canvas, ...canvasCal, ...custom, ...google, ...outlook];
   }, [
     canvasAssignments,
     canvasEvents,
     customAssignmentsList,
     googleEvents,
+    outlookEvents,
     hiddenCalendarIds,
   ]);
 
@@ -176,7 +201,7 @@ const Index = () => {
   };
 
   const handleToggleAssignment = (assignment: CombinedAssignment) => {
-    if (assignment.isGoogleEvent || assignment.isCanvasEvent) return;
+    if (assignment.isGoogleEvent || assignment.isCanvasEvent || assignment.isOutlookEvent) return;
     if (assignment.isCustom) {
       toggleCustomAssignment.mutate({
         id: assignment.id as string,
@@ -309,7 +334,8 @@ const Index = () => {
 
               <div className="flex items-center gap-4 border-t pt-4">
                 {!selectedEvent.isGoogleEvent &&
-                  !selectedEvent.isCanvasEvent && (
+                  !selectedEvent.isCanvasEvent &&
+                  !selectedEvent.isOutlookEvent && (
                     <div className="flex items-center gap-2">
                       <Checkbox
                         checked={selectedEvent.completed || false}
@@ -333,7 +359,9 @@ const Index = () => {
                   >
                     {selectedEvent.isGoogleEvent
                       ? "Open in Google Calendar"
-                      : "View in Canvas"}
+                      : selectedEvent.isOutlookEvent
+                        ? "Open in Outlook"
+                        : "View in Canvas"}
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 )}
@@ -351,6 +379,15 @@ const Index = () => {
       return (
         <img
           src="/google-calendar-icon.svg"
+          alt=""
+          className="w-3.5 h-3.5 shrink-0 rounded-[2px]"
+        />
+      );
+    }
+    if (assignment.isOutlookEvent) {
+      return (
+        <img
+          src="/outlook-calendar-icon.svg"
           alt=""
           className="w-3.5 h-3.5 shrink-0 rounded-[2px]"
         />

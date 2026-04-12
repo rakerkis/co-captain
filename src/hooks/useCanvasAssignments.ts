@@ -19,35 +19,39 @@ export const useCanvasAssignments = () => {
   return useQuery({
     queryKey: ["canvas-assignments"],
     queryFn: async () => {
-      const { assignments } = await fetchCanvasData();
-      
-      // Filter out assignments older than 1 week past due date
-      const oneWeekAgo = subWeeks(new Date(), 1);
-      const recentAssignments = assignments.filter((a) => {
-        if (!a.due_at) return true;
-        const dueDate = new Date(a.due_at);
-        return dueDate >= oneWeekAgo;
-      });
+      try {
+        const { assignments } = await fetchCanvasData();
 
-      // Fetch completion status from Supabase
-      const { data: completions } = await supabase
-        .from("assignment_completions")
-        .select("assignment_id, completed");
+        // Filter out assignments older than 1 week past due date
+        const oneWeekAgo = subWeeks(new Date(), 1);
+        const recentAssignments = assignments.filter((a) => {
+          if (!a.due_at) return true;
+          const dueDate = new Date(a.due_at);
+          return dueDate >= oneWeekAgo;
+        });
 
-      const completionMap = new Map(
-        completions?.map((c) => [c.assignment_id, c.completed]) || []
-      );
+        // Fetch completion status from Supabase
+        const { data: completions } = await supabase
+          .from("assignment_completions")
+          .select("assignment_id, completed");
 
-      // Merge completion status with assignments
-      const assignmentsWithStatus = recentAssignments.map((a) => ({
-        ...a,
-        completed: completionMap.get(a.id.toString()) || false,
-      }));
+        const completionMap = new Map(
+          completions?.map((c) => [c.assignment_id, c.completed]) || []
+        );
 
-      // Filter out completed assignments
-      const filteredAssignments = assignmentsWithStatus.filter((a) => !a.completed);
+        // Merge completion status with assignments
+        const assignmentsWithStatus = recentAssignments.map((a) => ({
+          ...a,
+          completed: completionMap.get(a.id.toString()) || false,
+        }));
 
-      return { assignments: filteredAssignments };
+        // Filter out completed assignments
+        const filteredAssignments = assignmentsWithStatus.filter((a) => !a.completed);
+
+        return { assignments: filteredAssignments };
+      } catch {
+        return { assignments: [] };
+      }
     },
     staleTime: 5 * 60 * 1000,
     retry: false,

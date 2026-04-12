@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { googleCalendar } from "@/integrations/googleCalendar";
+import { outlookCalendar } from "@/integrations/outlookCalendar";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
@@ -107,6 +108,29 @@ const AppLayout = ({ session }: { session: any }) => {
   const { isNative } = usePlatform();
   const navigate = useNavigate();
 
+  // Web: handle Outlook PKCE callback when Microsoft redirects back with ?code=
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (!code) return;
+    const verifier = window.localStorage.getItem("outlook-pkce-verifier");
+    if (!verifier) return; // not an Outlook callback — let Supabase handle it
+    (async () => {
+      try {
+        authLog(`outlook web PKCE exchange start`);
+        const email = await outlookCalendar.handleCallback(code);
+        authLog(`outlook web exchange ok email=${email}`);
+        if (email) window.localStorage.setItem("outlook-connected-email", email);
+        window.dispatchEvent(new CustomEvent("co-captain:outlook-auth-done", { detail: { email } }));
+        navigate(`/settings?outlook_auth=success&outlook_email=${encodeURIComponent(email)}`, { replace: true });
+      } catch (e: any) {
+        authLog(`outlook web exchange error: ${e.message}`);
+        navigate("/settings?outlook_auth=error", { replace: true });
+      }
+    })();
+  }, [navigate]);
+
   // Handle deep link callbacks on native (OAuth redirects back via custom URL scheme)
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -160,6 +184,30 @@ const AppLayout = ({ session }: { session: any }) => {
         console.log(`  ${key} = ${display}`);
       });
       authLog(`params: ${Array.from(params.keys()).join(", ") || "(none)"}`);
+
+      // Outlook Calendar PKCE callback (native)
+      if (url.startsWith("co-captain://outlook-auth") || params.get("outlook_auth") === "success") {
+        const code = params.get("code");
+        if (code) {
+          authLog(`outlook PKCE code received, exchanging...`);
+          try {
+            const email = await outlookCalendar.handleCallback(code);
+            authLog(`outlook exchange ok email=${email}`);
+            if (email) window.localStorage.setItem("outlook-connected-email", email);
+            window.dispatchEvent(new CustomEvent("co-captain:outlook-auth-done", { detail: { email } }));
+            navigate(`/settings?outlook_auth=success&outlook_email=${encodeURIComponent(email)}`);
+          } catch (e: any) {
+            authLog(`outlook exchange error: ${e.message}`);
+            navigate("/settings?outlook_auth=error");
+          }
+        } else {
+          const email = params.get("outlook_email") || "";
+          if (email) window.localStorage.setItem("outlook-connected-email", email);
+          window.dispatchEvent(new CustomEvent("co-captain:outlook-auth-done", { detail: { email } }));
+          navigate(`/settings?outlook_auth=success&outlook_email=${encodeURIComponent(email)}`);
+        }
+        return;
+      }
 
       // Google Calendar OAuth success
       if (params.get("google_auth") === "success") {
@@ -305,6 +353,7 @@ const AppLayout = ({ session }: { session: any }) => {
 const App = () => {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

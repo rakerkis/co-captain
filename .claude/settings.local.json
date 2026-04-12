@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"VITE_SUPABASE_URL\" c:/Users/zhenyumao/Documents/GitHub/co-captain/.env*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
