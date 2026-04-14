@@ -233,7 +233,13 @@ class GoogleCalendarService {
       } catch (refreshErr) {
         const msg = refreshErr instanceof Error ? refreshErr.message : String(refreshErr);
         this.log(`getEvents: refresh failed — ${msg}`);
-        throw new Error(`Google token expired. Refresh failed: ${msg}`);
+        // Auto-disconnect so the user sees a clean "Connect" button in Settings
+        // instead of appearing connected but broken.
+        try {
+          await this.disconnect();
+          this.log("getEvents: auto-disconnected after refresh failure");
+        } catch { /* ignore disconnect errors */ }
+        throw new Error("Google Calendar disconnected — token expired. Please reconnect in Settings.");
       }
     }
 
@@ -301,11 +307,15 @@ class GoogleCalendarService {
       throw new Error("No access_token in refresh response");
     }
 
-    // Update the DB with the new access token
+    // Update the DB with the new access token (and rotated refresh token if provided)
     const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+    const updatePayload: Record<string, string> = { access_token: data.access_token, expires_at: expiresAt };
+    if (data.refresh_token_rotated) {
+      this.log("refreshGoogleToken: Google rotated the refresh token");
+    }
     await supabase
       .from("google_calendar_tokens")
-      .update({ access_token: data.access_token, expires_at: expiresAt })
+      .update(updatePayload)
       .eq("user_id", userId);
 
     this.log(`refreshGoogleToken: success, new token len=${data.access_token.length}`);

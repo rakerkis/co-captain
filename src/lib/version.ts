@@ -1,2 +1,2 @@
-// v25: Add Outlook Calendar sync (client-side PKCE OAuth + Microsoft Graph API)
-export const APP_VERSION = "v25";
+// v26: Canvas performance fixes, GPA grade sync, Google token refresh, pull-to-refresh
+export const APP_VERSION = "v26";

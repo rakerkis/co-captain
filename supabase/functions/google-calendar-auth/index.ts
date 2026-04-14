@@ -158,27 +158,40 @@ serve(async (req) => {
       const newTokens = await refreshResponse.json();
 
       if (!refreshResponse.ok) {
-        console.error('Google token refresh failed:', newTokens);
+        console.error('Google token refresh failed:', JSON.stringify(newTokens));
+        console.error('Google error:', newTokens.error, '|', newTokens.error_description);
+        // Common causes: "invalid_grant" = refresh token expired (Testing mode: 7-day limit)
+        //                                  or token revoked by user
         return new Response(
-          JSON.stringify({ error: newTokens.error_description || 'Token refresh failed' }),
+          JSON.stringify({
+            error: newTokens.error_description || 'Token refresh failed',
+            google_error: newTokens.error || null,
+          }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Update the DB with the new access token
+      // Update the DB with the new access token (and rotated refresh token if Google returned one)
       const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
+      const updatePayload: Record<string, string> = {
+        access_token: newTokens.access_token,
+        expires_at: newExpiresAt.toISOString(),
+      };
+      if (newTokens.refresh_token) {
+        // Google rotated the refresh token — save the new one
+        updatePayload.refresh_token = newTokens.refresh_token;
+        console.log('Google rotated refresh token for user', user_id);
+      }
       await supabase
         .from('google_calendar_tokens')
-        .update({
-          access_token: newTokens.access_token,
-          expires_at: newExpiresAt.toISOString(),
-        })
+        .update(updatePayload)
         .eq('user_id', user_id);
 
       return new Response(
         JSON.stringify({
           access_token: newTokens.access_token,
           expires_in: newTokens.expires_in,
+          refresh_token_rotated: !!newTokens.refresh_token,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

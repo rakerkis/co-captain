@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { secureStorage } from "@/integrations/secureStorage";
 import { supabase } from "@/integrations/supabase/client";
 import { googleCalendar } from "@/integrations/googleCalendar";
+import { testCanvasConnection } from "@/integrations/canvasApi";
 import { outlookCalendar } from "@/integrations/outlookCalendar";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
@@ -51,6 +52,8 @@ const SettingsPage = () => {
   const [outlookError, setOutlookError] = useState<string | null>(null);
   const [tokenIsNew, setTokenIsNew] = useState(false);
   const [maskedToken, setMaskedToken] = useState("");
+  const [canvasTesting, setCanvasTesting] = useState(false);
+  const [canvasTestResult, setCanvasTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Run once on mount: load persisted settings, then check live auth status.
   // checkStatus runs AFTER settings load so auth state always wins over stale persisted values.
@@ -265,6 +268,32 @@ const SettingsPage = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTestCanvas = async () => {
+    setCanvasTesting(true);
+    setCanvasTestResult(null);
+    try {
+      // Read saved settings from secure storage (the token is masked in state)
+      const saved = await secureStorage.getItem("co-captain-settings");
+      if (!saved) {
+        setCanvasTestResult({ ok: false, message: "No Canvas settings saved. Please save first." });
+        return;
+      }
+      const parsed = JSON.parse(saved);
+      if (!parsed.canvasDomain || !parsed.canvasToken) {
+        setCanvasTestResult({ ok: false, message: "Canvas domain or token missing. Please save first." });
+        return;
+      }
+      // Lightweight API call — only fetches courses to verify token works
+      const result = await testCanvasConnection();
+      setCanvasTestResult({ ok: true, message: `Connected! Found ${result.courseCount} course${result.courseCount !== 1 ? "s" : ""}.` });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      setCanvasTestResult({ ok: false, message: msg });
+    } finally {
+      setCanvasTesting(false);
     }
   };
 
@@ -508,6 +537,32 @@ const SettingsPage = () => {
                 </>
               )}
             </div>
+
+            {/* Test Connection Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestCanvas}
+              disabled={canvasTesting || (!maskedToken && !settings.canvasToken)}
+              className="w-full"
+            >
+              {canvasTesting ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4 mr-2" />
+              )}
+              {canvasTesting ? "Testing..." : "Test Connection"}
+            </Button>
+            {canvasTestResult && (
+              <div className={`flex items-center gap-2 text-sm ${canvasTestResult.ok ? "text-green-600" : "text-red-600"}`}>
+                {canvasTestResult.ok ? (
+                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 flex-shrink-0" />
+                )}
+                <span>{canvasTestResult.message}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -39,7 +39,10 @@ import {
   ChevronDown,
   Check,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { RefreshCw } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,6 +89,15 @@ const Index = () => {
     null,
   );
   const { isNative } = usePlatform();
+  const queryClient = useQueryClient();
+
+  const handleRefresh = useCallback(async () => {
+    await queryClient.invalidateQueries();
+  }, [queryClient]);
+
+  const { pulling, refreshing, pullDistance, handlers } = usePullToRefresh({
+    onRefresh: handleRefresh,
+  });
 
   const canvasAssignments = data?.assignments || [];
   const customAssignmentsList = customAssignments || [];
@@ -753,7 +765,25 @@ const Index = () => {
             <span className="text-lg font-semibold">{headerLabel}</span>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 overflow-hidden p-4">
+        <CardContent
+          className="flex-1 overflow-y-auto p-4 relative"
+          {...(isNative ? handlers : {})}
+        >
+          {/* Pull-to-refresh indicator */}
+          {isNative && (pulling || refreshing) && (
+            <div
+              className="flex items-center justify-center transition-all duration-200"
+              style={{ height: pullDistance, minHeight: 0 }}
+            >
+              <RefreshCw
+                className={`w-5 h-5 text-muted-foreground ${refreshing ? "animate-spin" : ""}`}
+                style={{
+                  opacity: Math.min(pullDistance / 60, 1),
+                  transform: `rotate(${pullDistance * 3}deg)`,
+                }}
+              />
+            </div>
+          )}
           {viewMode === "month" && (
             <div className="h-full flex flex-col">
               <div className="grid grid-cols-7 mb-1">
