@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Settings, Save, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle, ScanLine } from "lucide-react";
+import { Settings, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle, ScanLine, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/hooks/useTheme";
 import { APP_VERSION } from "@/lib/version";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ interface SettingsData {
 const SettingsPage = () => {
   const { toast } = useToast();
   const location = useLocation();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
@@ -60,17 +62,22 @@ const SettingsPage = () => {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.provider_token && session?.user?.app_metadata?.provider === 'google') {
-          const email = session.user?.email || "";
-          if (email) window.localStorage.setItem("google-connected-email", email);
-          setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: email }));
-          setGoogleStatus("Connected successfully!");
-        } else {
-          const isConnected = await googleCalendar.isAuthenticated();
-          if (isConnected) {
-            const savedEmail = window.localStorage.getItem("google-connected-email") || "";
-            setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: savedEmail }));
+        // Skip auto-reconnect if the user explicitly disconnected Google Calendar
+        const wasDisconnected = window.localStorage.getItem("google-calendar-disconnected") === "true";
+
+        if (!wasDisconnected) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.provider_token && session?.user?.app_metadata?.provider === 'google') {
+            const email = session.user?.email || "";
+            if (email) window.localStorage.setItem("google-connected-email", email);
+            setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: email }));
+            setGoogleStatus("Connected successfully!");
+          } else {
+            const isConnected = await googleCalendar.isAuthenticated();
+            if (isConnected) {
+              const savedEmail = window.localStorage.getItem("google-connected-email") || "";
+              setSettings((prev) => ({ ...prev, googleConnected: true, googleEmail: savedEmail }));
+            }
           }
         }
 
@@ -115,6 +122,7 @@ const SettingsPage = () => {
     if (googleAuth === "success") {
       const email = googleEmail || "";
       if (email) window.localStorage.setItem("google-connected-email", email);
+      window.localStorage.removeItem("google-calendar-disconnected");
       setSettings((prev) => ({
         ...prev,
         googleConnected: true,
@@ -306,6 +314,7 @@ const SettingsPage = () => {
         console.error("Disconnect error:", e);
       }
       window.localStorage.removeItem("google-connected-email");
+      window.localStorage.setItem("google-calendar-disconnected", "true");
         
         const newSettings = { ...settings, googleConnected: false, googleEmail: "" };
         setSettings(newSettings);
@@ -322,6 +331,7 @@ const SettingsPage = () => {
 
     setGoogleLoading(true);
     setGoogleError(null);
+    window.localStorage.removeItem("google-calendar-disconnected");
     try {
       const result = await googleCalendar.connect();
       if (result === 'redirecting') {
@@ -468,100 +478,128 @@ const SettingsPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="canvasDomain">Canvas Domain</Label>
-              <Input
-                id="canvasDomain"
-                  placeholder="canvas.instructure.com"
-                value={settings.canvasDomain}
-                onChange={(e) =>
-                  setSettings({ ...settings, canvasDomain: e.target.value })
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Usually your institution's name followed by .instructure.com
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="canvasToken">API Token</Label>
-              {maskedToken && !tokenIsNew ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="canvasToken"
-                    type="text"
-                    value={maskedToken}
-                    disabled
-                    className="font-mono"
-                  />
+            {maskedToken ? (
+              <>
+                <p className="text-sm">
+                  <span className="text-green-500">Connected to </span>
+                  <span className="font-medium text-blue-500">{settings.canvasDomain}</span>
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      setSettings((prev) => ({ ...prev, canvasDomain: "", canvasToken: "" }));
+                      setMaskedToken("");
+                      setTokenIsNew(false);
+                      setCanvasTestResult(null);
+                      try {
+                        const saved = await secureStorage.getItem("co-captain-settings");
+                        if (saved) {
+                          const parsed = JSON.parse(saved);
+                          delete parsed.canvasDomain;
+                          delete parsed.canvasToken;
+                          await secureStorage.setItem("co-captain-settings", JSON.stringify(parsed));
+                        }
+                      } catch {}
+                      toast({ title: "Canvas Disconnected", description: "Domain and token have been cleared." });
+                    }}
+                    className="flex-1"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Disconnect Canvas
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setMaskedToken("");
-                      setTokenIsNew(true);
-                    }}
+                    onClick={handleTestCanvas}
+                    disabled={canvasTesting}
+                    className="h-10 shrink-0"
+                    title="Test Connection"
                   >
-                    Change
+                    {canvasTesting ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Test"}
                   </Button>
                 </div>
-              ) : (
-                <Input
-                  id="canvasToken"
-                  type={tokenIsNew ? "text" : "password"}
-                  placeholder="Enter your Canvas API token"
-                  value={settings.canvasToken}
-                  onChange={(e) => {
-                    setSettings({ ...settings, canvasToken: e.target.value });
-                    if (!tokenIsNew) setTokenIsNew(true);
-                  }}
-                />
-              )}
-              <p className="text-xs text-muted-foreground">
-                Get your token from Canvas → Account → Settings → New Access Token
-              </p>
-              {Capacitor.isNativePlatform() && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleScanToken}
-                    className="w-full"
-                  >
-                    <ScanLine className="w-4 h-4 mr-2" />
-                    Scan Token QR Code
-                  </Button>
-                  <p className="text-xs text-muted-foreground text-center">
-                    Copy your token on a computer, paste it into any QR code generator website, then scan it here
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* Test Connection Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTestCanvas}
-              disabled={canvasTesting || (!maskedToken && !settings.canvasToken)}
-              className="w-full"
-            >
-              {canvasTesting ? (
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <CheckCircle className="w-4 h-4 mr-2" />
-              )}
-              {canvasTesting ? "Testing..." : "Test Connection"}
-            </Button>
-            {canvasTestResult && (
-              <div className={`flex items-center gap-2 text-sm ${canvasTestResult.ok ? "text-green-600" : "text-red-600"}`}>
-                {canvasTestResult.ok ? (
-                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                ) : (
-                  <XCircle className="w-4 h-4 flex-shrink-0" />
+                {canvasTestResult && (
+                  <div className={`flex items-center gap-2 text-sm ${canvasTestResult.ok ? "text-green-600" : "text-red-600"}`}>
+                    {canvasTestResult.ok ? (
+                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 flex-shrink-0" />
+                    )}
+                    <span>{canvasTestResult.message}</span>
+                  </div>
                 )}
-                <span>{canvasTestResult.message}</span>
-              </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="canvasDomain">Canvas Domain</Label>
+                  <Input
+                    id="canvasDomain"
+                    placeholder="canvas.instructure.com"
+                    value={settings.canvasDomain}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    onChange={(e) =>
+                      setSettings({ ...settings, canvasDomain: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Usually your institution's name followed by .instructure.com
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="canvasToken">API Token</Label>
+                  <Input
+                    id="canvasToken"
+                    type={tokenIsNew ? "text" : "password"}
+                    placeholder="Enter your Canvas API token"
+                    value={settings.canvasToken}
+                    onChange={(e) => {
+                      setSettings({ ...settings, canvasToken: e.target.value });
+                      if (!tokenIsNew) setTokenIsNew(true);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Get your token from Canvas → Account → Settings → New Access Token
+                  </p>
+                  {Capacitor.isNativePlatform() && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleScanToken}
+                        className="w-full"
+                      >
+                        <ScanLine className="w-4 h-4 mr-2" />
+                        Scan Token QR Code
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Copy your token on a computer, paste it into any QR code generator website, then scan it here
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                <Button
+                  onClick={handleSave}
+                  disabled={loading || !settings.canvasDomain || !settings.canvasToken}
+                  className="w-full"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="w-4 h-4 mr-2" />
+                      Connect Canvas
+                    </>
+                  )}
+                </Button>
+              </>
             )}
           </CardContent>
         </Card>
@@ -580,32 +618,31 @@ const SettingsPage = () => {
           <CardContent className="space-y-4">
             {settings.googleConnected ? (
               <>
-                <div className="flex items-center gap-2 text-green-600">
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">Connected to Google Calendar</span>
-                </div>
                 {settings.googleEmail && (
-                  <p className="text-sm text-muted-foreground">
-                    Signed in as <span className="font-medium text-foreground">{settings.googleEmail}</span>
+                  <p className="text-sm">
+                    <span className="text-green-500">Signed in as </span>
+                    <span className="font-medium text-blue-500">{settings.googleEmail}</span>
                   </p>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={handleConnectGoogle}
-                  className="w-full"
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Disconnect Google Account
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={testGoogleConnection}
-                  className="w-full"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Test Connection
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleConnectGoogle}
+                    className="flex-1"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Disconnect Google Account
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={testGoogleConnection}
+                    className="h-10 shrink-0"
+                    title="Test Connection"
+                  >
+                    Test
+                  </Button>
+                </div>
               </>
             ) : (
               <>
@@ -634,9 +671,6 @@ const SettingsPage = () => {
             {googleError && (
               <p className="text-sm text-red-500 font-medium">{googleError} [{APP_VERSION}]</p>
             )}
-            {googleStatus && !googleError && (
-              <p className="text-sm text-green-500 font-medium">{googleStatus}</p>
-            )}
           </CardContent>
         </Card>
 
@@ -654,23 +688,27 @@ const SettingsPage = () => {
           <CardContent className="space-y-4">
             {settings.outlookConnected ? (
               <>
-                <div className="flex items-center gap-2 text-green-600">
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">Connected to Outlook Calendar</span>
-                </div>
                 {settings.outlookEmail && (
-                  <p className="text-sm text-muted-foreground">
-                    Signed in as <span className="font-medium text-foreground">{settings.outlookEmail}</span>
+                  <p className="text-sm">
+                    <span className="text-green-500">Signed in as </span>
+                    <span className="font-medium text-blue-500">{settings.outlookEmail}</span>
                   </p>
                 )}
-                <Button variant="outline" onClick={handleConnectOutlook} className="w-full">
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Disconnect Outlook Account
-                </Button>
-                <Button variant="outline" size="sm" onClick={testOutlookConnection} className="w-full">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Test Connection
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleConnectOutlook} className="flex-1">
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Disconnect Outlook Account
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={testOutlookConnection}
+                    className="h-10 shrink-0"
+                    title="Test Connection"
+                  >
+                    Test
+                  </Button>
+                </div>
               </>
             ) : (
               <>
@@ -720,9 +758,11 @@ const SettingsPage = () => {
               <input
                 type="checkbox"
                 checked={settings.autoSync}
-                onChange={(e) =>
-                  setSettings({ ...settings, autoSync: e.target.checked })
-                }
+                onChange={(e) => {
+                  const updated = { ...settings, autoSync: e.target.checked };
+                  setSettings(updated);
+                  secureStorage.setItem("co-captain-settings", JSON.stringify(updated)).catch(console.error);
+                }}
                 className="w-5 h-5"
               />
             </div>
@@ -738,10 +778,12 @@ const SettingsPage = () => {
                   value={settings.syncInterval}
                   onChange={(e) => {
                     const val = parseInt(e.target.value) || 15;
-                    setSettings({
+                    const updated = {
                       ...settings,
                       syncInterval: Math.max(1, Math.min(60, val)),
-                    });
+                    };
+                    setSettings(updated);
+                    secureStorage.setItem("co-captain-settings", JSON.stringify(updated)).catch(console.error);
                   }}
                 />
               </div>
@@ -749,11 +791,37 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
 
-        {/* Save Button */}
-        <Button onClick={handleSave} disabled={loading} className="w-full">
-          <Save className="w-4 h-4 mr-2" />
-          {loading ? "Saving..." : "Save Settings"}
-        </Button>
+        {/* Appearance */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {theme === "dark" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+              Appearance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Button
+                variant={theme === "dark" ? "default" : "outline"}
+                size="sm"
+                className="flex-1"
+                onClick={() => setTheme("dark")}
+              >
+                <Moon className="w-4 h-4 mr-2" />
+                Dark
+              </Button>
+              <Button
+                variant={theme === "light" ? "default" : "outline"}
+                size="sm"
+                className="flex-1"
+                onClick={() => setTheme("light")}
+              >
+                <Sun className="w-4 h-4 mr-2" />
+                Light
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Auth Debug Panel */}
         <div className="border rounded-lg p-3 bg-muted/40 text-xs">

@@ -369,7 +369,9 @@ const App = () => {
       // capacitor://localhost?code=xxx and Supabase auto-exchanges the code.
       // The resulting session includes provider_token — store it so Google Calendar
       // is connected automatically without a second OAuth step.
-      if (session?.provider_token && Capacitor.isNativePlatform()) {
+      // Only auto-store provider tokens if the user hasn't explicitly disconnected
+      const wasDisconnected = window.localStorage.getItem("google-calendar-disconnected") === "true";
+      if (session?.provider_token && Capacitor.isNativePlatform() && !wasDisconnected) {
         supabase.functions
           .invoke("google-calendar-auth/store", {
             body: {

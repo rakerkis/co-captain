@@ -1,8 +1,10 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { applyTheme } from "./hooks/useTheme";
 
-// Enable dark mode by default
-document.documentElement.classList.add("dark");
+// Apply saved theme (defaults to dark)
+const saved = localStorage.getItem("co-captain-theme");
+applyTheme(saved === "light" ? "light" : "dark");
 
 createRoot(document.getElementById("root")!).render(<App />);
