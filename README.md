@@ -156,10 +156,17 @@ Visit the hosted app and connect your accounts in Settings.
 git clone https://github.com/LakeMont198/co-captain.git
 cd co-captain
 npm install
+```
+
+The app comes pre-configured with Supabase credentials in `.env`. To use your own Supabase project, see the instructions in that file.
+
+Start the dev server:
+
+```bash
 npm run dev
 ```
 
-Then open [http://localhost:8080](http://localhost:8080) in your browser.
+Open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ---
 

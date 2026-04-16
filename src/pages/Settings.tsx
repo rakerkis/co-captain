@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Settings, ExternalLink, Globe, RefreshCw, CheckCircle, XCircle, ScanLine, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { APP_VERSION } from "@/lib/version";
@@ -32,6 +33,7 @@ interface SettingsData {
 const SettingsPage = () => {
   const { toast } = useToast();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -98,9 +100,18 @@ const SettingsPage = () => {
           if (parsed.canvasToken) {
             const token = parsed.canvasToken;
             setMaskedToken(token.slice(0, 6) + "••••••••••");
-            setSettings((prev) => ({ ...prev, ...parsed, canvasToken: "" }));
+            setSettings((prev) => ({
+              ...prev,
+              ...parsed,
+              canvasDomain: parsed.canvasDomain || prev.canvasDomain,
+              canvasToken: "",
+            }));
           } else {
-            setSettings((prev) => ({ ...prev, ...parsed }));
+            setSettings((prev) => ({
+              ...prev,
+              ...parsed,
+              canvasDomain: parsed.canvasDomain || prev.canvasDomain,
+            }));
           }
         } catch (e) {
           console.error("Failed to parse settings:", e);
@@ -263,6 +274,11 @@ const SettingsPage = () => {
         setSettings((prev) => ({ ...prev, canvasToken: "" }));
         setTokenIsNew(false);
       }
+
+      // Invalidate Canvas queries so calendar/assignments refresh with new credentials
+      queryClient.invalidateQueries({ queryKey: ["canvas-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["canvas-courses"] });
+      queryClient.invalidateQueries({ queryKey: ["canvas-calendar-events"] });
 
       toast({
         title: "Settings Saved",
@@ -488,7 +504,7 @@ const SettingsPage = () => {
                   <Button
                     variant="outline"
                     onClick={async () => {
-                      setSettings((prev) => ({ ...prev, canvasDomain: "", canvasToken: "" }));
+                      setSettings((prev) => ({ ...prev, canvasDomain: "canvas.instructure.com", canvasToken: "" }));
                       setMaskedToken("");
                       setTokenIsNew(false);
                       setCanvasTestResult(null);

@@ -126,6 +126,53 @@ This log documents the process of setting up Android development for Co-Captain 
 
 ---
 
+## Testing on a Physical Android Phone
+
+### Prerequisites
+- USB cable (USB-C or Micro-USB depending on your phone)
+- Android SDK platform-tools installed (`~/Library/Android/sdk/platform-tools/adb`)
+
+### Step 1: Enable Developer Options
+1. Go to **Settings → About Phone**
+2. Tap **Build Number** 7 times until you see "You are now a developer!"
+
+### Step 2: Enable USB Debugging
+1. Go to **Settings → Developer Options** (or **Settings → System → Developer Options**)
+2. Toggle on **USB Debugging**
+
+### Step 3: Connect via USB
+1. Plug your phone into your Mac with a USB cable
+2. On the phone, tap **Allow** when prompted to "Allow USB debugging"
+
+### Step 4: Verify the Device is Detected
+```bash
+~/Library/Android/sdk/platform-tools/adb devices
+```
+You should see your device serial number listed with `device` status (e.g. `R5CXC2HY56J  device`).
+
+### Step 5: Build, Deploy, and Run
+```bash
+npx cap run android --target <DEVICE_SERIAL>
+```
+Replace `<DEVICE_SERIAL>` with the serial number from step 4. This builds the APK, installs it on the phone, and launches the app.
+
+If only one device is connected (no emulator running), you can omit `--target`:
+```bash
+npx cap run android
+```
+
+### Alternative: Wireless Debugging (No Cable)
+1. Enable **Wireless Debugging** in Developer Options
+2. Tap into it and choose **Pair device with pairing code**
+3. On your Mac:
+   ```bash
+   ~/Library/Android/sdk/platform-tools/adb pair <ip:port> <pairing-code>
+   ~/Library/Android/sdk/platform-tools/adb connect <ip:port>
+   ```
+4. Run `npx cap run android` as usual
+
+---
+
 ## Key Technical Lessons
 
 1. **Capacitor 8 requires JDK 21**, not JDK 17. The Android Gradle Plugin uses source level 21.
