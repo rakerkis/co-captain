@@ -1,5 +1,7 @@
 # Co-Captain 🎓
 
+### 👉 **[Try Co-Captain live at co-captain.vercel.app](https://co-captain.vercel.app)** 👈
+
 **Your academic life, unified.**
 
 Co-Captain is a cross-platform student productivity app that automatically syncs **Google Calendar**, **Outlook Calendar**, and **Canvas LMS** into one clean, unified view. No more tab-switching between platforms — see your assignments, deadlines, grades, and personal events all in one place.
@@ -145,8 +147,9 @@ Connect and manage your calendar and LMS accounts. All connections are optional 
 
 ## Getting Started
 
-### Option 1: Web App
-Visit the hosted app and connect your accounts in Settings.
+### Option 1: Use the Hosted Web App
+
+Visit **[co-captain.vercel.app](https://co-captain.vercel.app)** and connect your accounts in Settings. No installation required — works on any modern browser.
 
 ### Option 2: Run from Source
 
@@ -167,6 +170,35 @@ npm run dev
 ```
 
 Open [http://localhost:8080](http://localhost:8080) in your browser.
+
+---
+
+## Deploying Your Own Instance
+
+Co-Captain is a Vite + React static frontend with Supabase as the managed backend, so any static host works. The hosted demo at [co-captain.vercel.app](https://co-captain.vercel.app) runs on Vercel's free tier.
+
+### Deploy to Vercel
+
+1. Fork or clone this repo to your own GitHub account.
+2. Sign in to [vercel.com](https://vercel.com) with GitHub.
+3. Click **Import Project** and select your `co-captain` repo.
+4. Vercel auto-detects Vite — no `vercel.json` needed.
+5. Under **Environment Variables**, add:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+6. Click **Deploy**. Your app is live at `https://<your-project>.vercel.app` in about a minute.
+
+### OAuth redirect setup
+
+After deploying, you need to register your production URL with Supabase, Google, and Microsoft — otherwise sign-in flows will fail with redirect errors. The key points:
+
+- **Supabase** → Auth → URL Configuration:
+  - Set **Site URL** to your production URL (controls email confirmation/reset links).
+  - Add your production URL, `http://localhost:8080`, and the Capacitor scheme (`co-captain://`) to the **Redirect URLs** allow-list.
+- **Google Cloud Console** → OAuth 2.0 Client: add your production URL as an Authorized JavaScript origin. The redirect URI stays as Supabase's callback.
+- **Azure (Microsoft Entra)** → App registration → Authentication: add your production URL under the **Single-page application** platform (not Web — PKCE flow requires SPA).
+
+**Full step-by-step walkthrough with gotchas:** see [devlog/DEVLOG-2026-04-17-deployment.md](devlog/DEVLOG-2026-04-17-deployment.md).
 
 ---
 
