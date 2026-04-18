@@ -29,13 +29,13 @@ All colors MUST be HSL.
     --ring: 215 15% 45%;
     --radius: 0.75rem;
 
-    --sidebar-background: 215 20% 20%;
-    --sidebar-foreground: 0 0% 98%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 215 25% 15%;
     --sidebar-primary: 215 15% 45%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 215 15% 30%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 215 15% 25%;
+    --sidebar-accent: 215 15% 92%;
+    --sidebar-accent-foreground: 215 25% 20%;
+    --sidebar-border: 0 0% 89.8%;
     --sidebar-ring: 215 15% 45%;
   }
 
